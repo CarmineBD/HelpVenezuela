@@ -14,9 +14,32 @@ import { env } from './env.js';
 import { prisma } from './prisma.js';
 
 const app = Fastify({ logger: true });
+let isShuttingDown = false;
 
 await app.register(cors, { origin: env.corsOrigin });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+
+app.addHook('onClose', async () => {
+  await prisma.$disconnect();
+});
+
+async function shutdown() {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  await app.close();
+  process.exit(0);
+}
+
+process.once('SIGINT', () => {
+  void shutdown();
+});
+
+process.once('SIGTERM', () => {
+  void shutdown();
+});
 
 app.get('/health', async () => ({ ok: true }));
 

@@ -195,6 +195,18 @@ h1 {
   gap: 14px;
 }
 
+.form-section {
+  border-top: 1px solid #e2e9e2;
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.form-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
 label,
 fieldset {
   border: 0;
@@ -211,6 +223,17 @@ label {
   font-weight: 700;
 }
 
+.form-section > legend {
+  color: #172026;
+  font-size: 1rem;
+  font-weight: 800;
+  padding: 0;
+}
+
+.required-mark {
+  color: #b42318;
+}
+
 input,
 select,
 textarea {
@@ -225,10 +248,40 @@ textarea {
   resize: vertical;
 }
 
+.compound-input {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(96px, auto) 1fr;
+}
+
+.compound-input select {
+  min-width: 0;
+}
+
+.contact-input {
+  grid-template-columns: minmax(190px, auto) 1fr;
+}
+
 .grid-two {
   display: grid;
   gap: 10px;
   grid-template-columns: 1fr 1fr;
+}
+
+.coordinates-row {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+}
+
+.coordinates-fields {
+  width: 100%;
+}
+
+.location-button {
+  min-height: 42px;
+  white-space: nowrap;
 }
 
 .switch-row {
@@ -552,6 +605,16 @@ textarea {
 
   .grid-two {
     grid-template-columns: 1fr;
+  }
+
+  .compound-input,
+  .contact-input,
+  .coordinates-row {
+    grid-template-columns: 1fr;
+  }
+
+  .location-button {
+    white-space: normal;
   }
 
   .choice-grid {

@@ -1,8 +1,23 @@
-import { helpTypes, type CreateHelpPostInput, type UpdateHelpPostInput } from '@help-venezuela/shared';
-import L from 'leaflet';
-import { ArrowLeft, Eye, EyeOff, HandHeart, LifeBuoy, MapPin, Pencil, Send, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
+  helpTypes,
+  type CreateHelpPostInput,
+  type UpdateHelpPostInput,
+} from "@help-venezuela/shared";
+import L from "leaflet";
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  HandHeart,
+  LifeBuoy,
+  MapPin,
+  Pencil,
+  Send,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  ApiError,
   createHelpPost,
   getMapHelpPosts,
   getPersonPosts,
@@ -10,35 +25,297 @@ import {
   updateHelpPostStatus,
   type HelpPost,
   type HelpPostStatus,
-  type PublicMapPost
-} from './api';
+  type PublicMapPost,
+} from "./api";
+import {
+  isVenezuelaLocationOption,
+  venezuelaLocationOptions,
+} from "./venezuelaLocations";
 
-type FormKind = 'NEED' | 'OFFER';
+type FormKind = "NEED" | "OFFER";
+type IdentityCardPrefix = "V" | "E";
+type ErrorContext = "create" | "update" | "loadOwnerPosts" | "status" | "map";
 
 type HelpPostForm = CreateHelpPostInput & {
-  urgency: 'LOW' | 'MEDIUM' | 'HIGH';
+  urgency: "LOW" | "MEDIUM" | "HIGH";
 };
 
 const descriptionMaxLength = 500;
+const fieldErrorMessages: Record<string, string> = {
+  contact: "El contacto debe incluir prefijo y un número válido.",
+  description: "La descripción debe tener entre 10 y 500 caracteres.",
+  helpTypeSlugs: "Selecciona al menos un tipo de ayuda.",
+  identityCard: "La cédula debe empezar por V o E y tener entre 5 y 12 números.",
+  latitude: "La latitud debe estar entre -90 y 90.",
+  locationLabel: "Selecciona una zona válida de la lista.",
+  longitude: "La longitud debe estar entre -180 y 180.",
+  name: "El nombre y apellidos deben tener entre 2 y 80 caracteres.",
+  status: "El estado seleccionado no es válido.",
+  timeFrom: "Indica una hora de inicio válida y anterior a la hora de fin.",
+  timeTo: "Indica una hora de fin válida y posterior a la hora de inicio.",
+  urgency: "Selecciona la urgencia de la solicitud.",
+};
+const identityCardPrefixes = ["V", "E"] as const;
+const countryDialCodes = [
+  { country: "Venezuela", code: "+58" },
+  { country: "Colombia", code: "+57" },
+  { country: "Brasil", code: "+55" },
+  { country: "Perú", code: "+51" },
+  { country: "Ecuador", code: "+593" },
+  { country: "Chile", code: "+56" },
+  { country: "Argentina", code: "+54" },
+  { country: "Uruguay", code: "+598" },
+  { country: "Paraguay", code: "+595" },
+  { country: "Bolivia", code: "+591" },
+  { country: "Panamá", code: "+507" },
+  { country: "México", code: "+52" },
+  { country: "España", code: "+34" },
+  { country: "Estados Unidos", code: "+1" },
+] as const;
+
+function sanitizeNumeric(value: string, maxLength: number) {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
+
+function getIdentityCardParts(value: string): {
+  prefix: IdentityCardPrefix;
+  number: string;
+} {
+  const normalizedValue = value.trim().toUpperCase().replace(/[\s-]+/g, "");
+  const prefix = normalizedValue.startsWith("E") ? "E" : "V";
+
+  return {
+    prefix,
+    number: sanitizeNumeric(normalizedValue.replace(/^[VE]/, ""), 12),
+  };
+}
+
+function formatIdentityCard(prefix: IdentityCardPrefix, value: string) {
+  return `${prefix}${sanitizeNumeric(value, 12)}`;
+}
+
+function getContactParts(value: string) {
+  const trimmedValue = value.trim();
+  const selectedCode =
+    [...countryDialCodes]
+      .sort((first, second) => second.code.length - first.code.length)
+      .find(({ code }) => trimmedValue.startsWith(code))?.code ?? "+58";
+
+  return {
+    code: selectedCode,
+    number: sanitizeNumeric(trimmedValue.replace(selectedCode, ""), 15),
+  };
+}
+
+function formatContact(code: string, value: string) {
+  return `${code}${sanitizeNumeric(value, 15)}`;
+}
+
+function roundCoordinate(value: number) {
+  return Number(value.toFixed(6));
+}
+
+function getValidationErrorMessage(error: ApiError) {
+  const fieldErrors = error.payload?.details?.fieldErrors ?? {};
+  const formErrors = error.payload?.details?.formErrors ?? [];
+  const messages = [
+    ...Object.entries(fieldErrors).map(([fieldName, fieldMessages]) => {
+      const customMessage = fieldErrorMessages[fieldName];
+      return customMessage ?? fieldMessages[0];
+    }),
+    ...formErrors,
+  ].filter(Boolean);
+
+  if (messages.length === 0) {
+    return "Hay campos inválidos. Revisa los datos marcados e intenta de nuevo.";
+  }
+
+  return messages.slice(0, 3).join(" ");
+}
+
+function getNetworkErrorMessage(context: ErrorContext) {
+  if (context === "map") {
+    return "No se pudo conectar con el servidor para cargar el mapa.";
+  }
+
+  return "No se pudo conectar con el servidor. Verifica que la API esté en ejecución y vuelve a intentar.";
+}
+
+function getApiErrorMessage(error: unknown, context: ErrorContext) {
+  if (error instanceof TypeError) {
+    return getNetworkErrorMessage(context);
+  }
+
+  if (!(error instanceof ApiError)) {
+    return "Ocurrió un error inesperado. Intenta de nuevo.";
+  }
+
+  if (error.status === 400) {
+    if (error.payload?.error === "INVALID_PAYLOAD") {
+      return getValidationErrorMessage(error);
+    }
+
+    if (error.payload?.error === "INVALID_HELP_TYPES") {
+      return "Uno o más tipos de ayuda no existen. Actualiza la página y selecciona opciones disponibles.";
+    }
+
+    if (error.payload?.error === "INVALID_QUERY") {
+      return "Los filtros usados para consultar publicaciones no son válidos.";
+    }
+
+    return "La solicitud contiene datos inválidos. Revisa la información enviada.";
+  }
+
+  if (error.status === 403) {
+    return "La cédula indicada no coincide con la persona que creó esta publicación.";
+  }
+
+  if (error.status === 404) {
+    return context === "status" || context === "update"
+      ? "La publicación ya no existe o no está disponible para modificar."
+      : "No se encontró información para los datos indicados.";
+  }
+
+  if (error.status === 410) {
+    return "Esta acción ya no está disponible para esa publicación.";
+  }
+
+  if (error.status === 429) {
+    return "Has hecho demasiadas solicitudes en poco tiempo. Espera un minuto y vuelve a intentar.";
+  }
+
+  if (error.status >= 500) {
+    return "El servidor falló al procesar la solicitud. Intenta de nuevo en unos minutos.";
+  }
+
+  return error.message || "Ocurrió un error inesperado. Intenta de nuevo.";
+}
+
+function RequiredMark() {
+  return (
+    <span aria-label="obligatorio" className="required-mark">
+      *
+    </span>
+  );
+}
+
+function IdentityCardInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (nextValue: string) => void;
+}) {
+  const identityCard = getIdentityCardParts(value);
+
+  return (
+    <label>
+      <span>
+        {label} <RequiredMark />
+      </span>
+      <div className="compound-input identity-input">
+        <select
+          aria-label="Tipo de cédula"
+          value={identityCard.prefix}
+          onChange={(event) =>
+            onChange(
+              formatIdentityCard(
+                event.target.value as IdentityCardPrefix,
+                identityCard.number,
+              ),
+            )
+          }
+        >
+          {identityCardPrefixes.map((prefix) => (
+            <option key={prefix} value={prefix}>
+              {prefix}
+            </option>
+          ))}
+        </select>
+        <input
+          inputMode="numeric"
+          pattern="\d{5,12}"
+          placeholder="12345678"
+          value={identityCard.number}
+          onChange={(event) =>
+            onChange(formatIdentityCard(identityCard.prefix, event.target.value))
+          }
+          required
+          title="Introduce solo números, entre 5 y 12 dígitos."
+        />
+      </div>
+    </label>
+  );
+}
+
+function ContactInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (nextValue: string) => void;
+}) {
+  const contact = getContactParts(value);
+
+  return (
+    <label>
+      <span>
+        Contacto o WhatsApp <RequiredMark />
+      </span>
+      <div className="compound-input contact-input">
+        <select
+          aria-label="Prefijo telefónico"
+          value={contact.code}
+          onChange={(event) =>
+            onChange(formatContact(event.target.value, contact.number))
+          }
+        >
+          {countryDialCodes.map(({ country, code }) => (
+            <option key={`${country}-${code}`} value={code}>
+              {country} ({code})
+            </option>
+          ))}
+        </select>
+        <input
+          inputMode="numeric"
+          pattern="\d{4,15}"
+          placeholder="4121234567"
+          type="tel"
+          value={contact.number}
+          onChange={(event) =>
+            onChange(formatContact(contact.code, event.target.value))
+          }
+          required
+          title="Introduce solo números para el teléfono."
+        />
+      </div>
+    </label>
+  );
+}
 
 function createInitialForm(kind: FormKind): HelpPostForm {
   return {
-    identityCard: '',
+    identityCard: "",
     kind,
-    name: '',
-    contact: '',
-    locationLabel: '',
+    name: "",
+    contact: "",
+    locationLabel: "",
     latitude: 10.4806,
     longitude: -66.9036,
     timeFrom: null,
     timeTo: null,
-    urgency: 'MEDIUM',
-    description: '',
-    helpTypeSlugs: []
+    urgency: "MEDIUM",
+    description: "",
+    helpTypeSlugs: [],
   };
 }
 
-function createFormFromPost(post: HelpPost, identityCard: string): HelpPostForm {
+function createFormFromPost(
+  post: HelpPost,
+  identityCard: string,
+): HelpPostForm {
   return {
     identityCard,
     kind: post.kind,
@@ -49,9 +326,9 @@ function createFormFromPost(post: HelpPost, identityCard: string): HelpPostForm 
     longitude: post.longitude,
     timeFrom: post.timeFrom,
     timeTo: post.timeTo,
-    urgency: post.urgency ?? 'MEDIUM',
+    urgency: post.urgency ?? "MEDIUM",
     description: post.description,
-    helpTypeSlugs: post.helpTypeSlugs
+    helpTypeSlugs: post.helpTypeSlugs,
   };
 }
 
@@ -59,17 +336,22 @@ function getCurrentPath() {
   return window.location.pathname;
 }
 
-function getTimeLabel(post: { timeFrom: string | null; timeTo: string | null }) {
-  return post.timeFrom && post.timeTo ? `${post.timeFrom} - ${post.timeTo}` : 'Cualquier momento';
+function getTimeLabel(post: {
+  timeFrom: string | null;
+  timeTo: string | null;
+}) {
+  return post.timeFrom && post.timeTo
+    ? `${post.timeFrom} - ${post.timeTo}`
+    : "Cualquier momento";
 }
 
 function getStatusLabel(status: HelpPostStatus) {
   const labels: Record<HelpPostStatus, string> = {
-    ACTIVE: 'Visible',
-    HIDDEN: 'Oculta',
-    CLOSED: 'Cerrada',
-    DELETED: 'Eliminada',
-    REPORTED: 'Reportada'
+    ACTIVE: "Visible",
+    HIDDEN: "Oculta",
+    CLOSED: "Cerrada",
+    DELETED: "Eliminada",
+    REPORTED: "Reportada",
   };
 
   return labels[status];
@@ -87,38 +369,40 @@ function toUpdateInput(form: HelpPostForm): UpdateHelpPostInput {
     timeTo: form.timeTo,
     urgency: form.urgency,
     description: form.description,
-    helpTypeSlugs: form.helpTypeSlugs
+    helpTypeSlugs: form.helpTypeSlugs,
   };
 }
 
-function createMarkerIcon(kind: PublicMapPost['kind']) {
+function createMarkerIcon(kind: PublicMapPost["kind"]) {
   return L.divIcon({
-    className: '',
-    html: `<span class="map-marker ${kind === 'NEED' ? 'need' : 'offer'}">${kind === 'NEED' ? 'N' : 'O'}</span>`,
+    className: "",
+    html: `<span class="map-marker ${kind === "NEED" ? "need" : "offer"}">${kind === "NEED" ? "N" : "O"}</span>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
-    popupAnchor: [0, -18]
+    popupAnchor: [0, -18],
   });
 }
 
 export function App() {
   const [path, setPath] = useState(getCurrentPath);
   const formKind = useMemo<FormKind | null>(() => {
-    if (path === '/formulario/ayudar') {
-      return 'OFFER';
+    if (path === "/formulario/ayudar") {
+      return "OFFER";
     }
 
-    if (path === '/formulario/ser-ayudado') {
-      return 'NEED';
+    if (path === "/formulario/ser-ayudado") {
+      return "NEED";
     }
 
     return null;
   }, [path]);
-  const [form, setForm] = useState<HelpPostForm>(() => createInitialForm(formKind ?? 'NEED'));
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [form, setForm] = useState<HelpPostForm>(() =>
+    createInitialForm(formKind ?? "NEED"),
+  );
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const [mapPosts, setMapPosts] = useState<PublicMapPost[]>([]);
-  const [ownerIdentityCard, setOwnerIdentityCard] = useState('');
+  const [ownerIdentityCard, setOwnerIdentityCard] = useState("");
   const [ownerPosts, setOwnerPosts] = useState<HelpPost[]>([]);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingForm, setEditingForm] = useState<HelpPostForm | null>(null);
@@ -131,42 +415,44 @@ export function App() {
       setPath(getCurrentPath());
     }
 
-    window.addEventListener('popstate', syncPath);
-    return () => window.removeEventListener('popstate', syncPath);
+    window.addEventListener("popstate", syncPath);
+    return () => window.removeEventListener("popstate", syncPath);
   }, []);
 
   useEffect(() => {
     if (formKind) {
       setForm(createInitialForm(formKind));
-      setMessage('');
-      setError('');
+      setMessage("");
+      setError("");
     }
   }, [formKind]);
 
   useEffect(() => {
-    if (path !== '/mapa') {
+    if (path !== "/mapa") {
       return;
     }
 
     getMapHelpPosts()
       .then(setMapPosts)
-      .catch(() => setError('No se pudo cargar el mapa de publicaciones.'));
+      .catch((caughtError: unknown) =>
+        setError(getApiErrorMessage(caughtError, "map")),
+      );
   }, [path]);
 
   useEffect(() => {
-    if (path !== '/mapa' || !mapCanvasRef.current) {
+    if (path !== "/mapa" || !mapCanvasRef.current) {
       return;
     }
 
     if (!leafletMapRef.current) {
       leafletMapRef.current = L.map(mapCanvasRef.current, {
         center: [8.0019, -66.1109],
-        zoom: 6
+        zoom: 6,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19,
       }).addTo(leafletMapRef.current);
       markerLayerRef.current = L.layerGroup().addTo(leafletMapRef.current);
     }
@@ -184,11 +470,17 @@ export function App() {
 
     const bounds = L.latLngBounds([]);
     mapPosts.forEach((post) => {
-      const position: L.LatLngTuple = [post.publicLatitude, post.publicLongitude];
+      const position: L.LatLngTuple = [
+        post.publicLatitude,
+        post.publicLongitude,
+      ];
       bounds.extend(position);
-      L.marker(position, { icon: createMarkerIcon(post.kind), title: post.locationLabel })
+      L.marker(position, {
+        icon: createMarkerIcon(post.kind),
+        title: post.locationLabel,
+      })
         .bindPopup(
-          `<strong>${post.kind === 'NEED' ? 'Necesita ayuda' : 'Ofrece ayuda'}</strong><br>${post.locationLabel}<br>${getTimeLabel(post)}`
+          `<strong>${post.kind === "NEED" ? "Necesita ayuda" : "Ofrece ayuda"}</strong><br>${post.locationLabel}<br>${getTimeLabel(post)}`,
         )
         .addTo(markerLayer ?? map);
     });
@@ -197,7 +489,7 @@ export function App() {
   }, [path, mapPosts]);
 
   useEffect(() => {
-    if (path === '/mapa') {
+    if (path === "/mapa") {
       return;
     }
 
@@ -207,37 +499,46 @@ export function App() {
   }, [path]);
 
   function navigate(nextPath: string) {
-    window.history.pushState(null, '', nextPath);
+    window.history.pushState(null, "", nextPath);
     setPath(nextPath);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage('');
-    setError('');
+    setMessage("");
+    setError("");
+
+    if (!isVenezuelaLocationOption(form.locationLabel)) {
+      setError("Selecciona una zona válida del autocompletado.");
+      return;
+    }
 
     try {
       await createHelpPost(form);
-      setMessage('Publicacion creada. Puedes gestionarla desde Mis publicaciones usando tu cedula.');
+      setMessage(
+        "Publicación creada. Puedes gestionarla desde Mis publicaciones usando tu cédula.",
+      );
       setForm(createInitialForm(form.kind));
-    } catch {
-      setError('No se pudo crear la publicacion. Revisa los campos e intenta otra vez.');
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError, "create"));
     }
   }
 
   async function loadOwnerPosts(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    setMessage('');
-    setError('');
+    setMessage("");
+    setError("");
     setEditingPostId(null);
     setEditingForm(null);
 
     try {
       const posts = await getPersonPosts(ownerIdentityCard);
       setOwnerPosts(posts);
-      setMessage(posts.length ? '' : 'No hay publicaciones asociadas a esa cedula.');
-    } catch {
-      setError('No se pudieron cargar tus publicaciones.');
+      setMessage(
+        posts.length ? "" : "No hay publicaciones asociadas a esa cédula.",
+      );
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError, "loadOwnerPosts"));
     }
   }
 
@@ -248,38 +549,79 @@ export function App() {
       return;
     }
 
-    setMessage('');
-    setError('');
+    setMessage("");
+    setError("");
+
+    if (!isVenezuelaLocationOption(editingForm.locationLabel)) {
+      setError("Selecciona una zona válida del autocompletado.");
+      return;
+    }
 
     try {
       await updateHelpPost(editingPostId, toUpdateInput(editingForm));
-      setMessage('Publicacion actualizada.');
+      setMessage("Publicación actualizada.");
       setEditingPostId(null);
       setEditingForm(null);
       await loadOwnerPosts();
-    } catch {
-      setError('No se pudo actualizar la publicacion.');
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError, "update"));
     }
   }
 
   async function changeStatus(postId: string, status: HelpPostStatus) {
-    setMessage('');
-    setError('');
+    setMessage("");
+    setError("");
 
     try {
       await updateHelpPostStatus(postId, ownerIdentityCard, status);
       await loadOwnerPosts();
-    } catch {
-      setError('No se pudo cambiar el estado de la publicacion.');
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError, "status"));
     }
   }
 
-  function toggleHelpType(slug: string, targetForm: HelpPostForm, setTargetForm: (nextForm: HelpPostForm) => void) {
+  function useCurrentLocation(
+    targetForm: HelpPostForm,
+    setTargetForm: (nextForm: HelpPostForm) => void,
+  ) {
+    setMessage("");
+    setError("");
+
+    if (!navigator.geolocation) {
+      setError("Tu navegador no permite solicitar la ubicación actual.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setTargetForm({
+          ...targetForm,
+          latitude: roundCoordinate(position.coords.latitude),
+          longitude: roundCoordinate(position.coords.longitude),
+        });
+        setMessage("Coordenadas actualizadas con tu ubicación actual.");
+      },
+      () => {
+        setError("No se pudo obtener la ubicación. Revisa el permiso del navegador.");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 60_000,
+        timeout: 10_000,
+      },
+    );
+  }
+
+  function toggleHelpType(
+    slug: string,
+    targetForm: HelpPostForm,
+    setTargetForm: (nextForm: HelpPostForm) => void,
+  ) {
     setTargetForm({
       ...targetForm,
       helpTypeSlugs: targetForm.helpTypeSlugs.includes(slug)
         ? targetForm.helpTypeSlugs.filter((item) => item !== slug)
-        : [...targetForm.helpTypeSlugs, slug]
+        : [...targetForm.helpTypeSlugs, slug],
     });
   }
 
@@ -287,177 +629,304 @@ export function App() {
     targetForm: HelpPostForm,
     setTargetForm: (nextForm: HelpPostForm) => void,
     onSubmit: (event: FormEvent<HTMLFormElement>) => void,
-    options: { isEditing: boolean }
+    options: { isEditing: boolean },
   ) {
-    const isNeedForm = targetForm.kind === 'NEED';
-    const isAnyTime = targetForm.timeFrom === null && targetForm.timeTo === null;
+    const isNeedForm = targetForm.kind === "NEED";
+    const isAnyTime =
+      targetForm.timeFrom === null && targetForm.timeTo === null;
+    const locationOptionsId = options.isEditing
+      ? "venezuela-location-options-edit"
+      : "venezuela-location-options-create";
 
     return (
       <form className="panel form" onSubmit={onSubmit}>
         <div className="section-title">
           {isNeedForm ? <LifeBuoy size={20} /> : <HandHeart size={20} />}
           <div>
-            <p className="eyebrow">{isNeedForm ? 'Solicitud de ayuda' : 'Oferta voluntaria'}</p>
-            <h1>{isNeedForm ? 'Ser ayudado' : 'Ayudar'}</h1>
+            <p className="eyebrow">
+              {isNeedForm ? "Solicitud de ayuda" : "Oferta voluntaria"}
+            </p>
+            <h1>{isNeedForm ? "Ser ayudado" : "Ayudar"}</h1>
           </div>
         </div>
 
-        {!options.isEditing && (
-          <label>
-            Cedula de identidad
-            <input
-              placeholder="Ej: V-12345678"
+        <fieldset className="form-section">
+          <legend>Información personal</legend>
+
+          {!options.isEditing && (
+            <IdentityCardInput
+              label="Cédula de identidad"
               value={targetForm.identityCard}
-              onChange={(event) => setTargetForm({ ...targetForm, identityCard: event.target.value })}
+              onChange={(identityCard) =>
+                setTargetForm({ ...targetForm, identityCard })
+              }
+            />
+          )}
+
+          {options.isEditing && (
+            <p className="locked-field">
+              Cédula usada para gestionar: {targetForm.identityCard}. No se
+              puede editar.
+            </p>
+          )}
+
+          <label>
+            <span>
+              Nombre y apellidos <RequiredMark />
+            </span>
+            <input
+              value={targetForm.name}
+              onChange={(event) =>
+                setTargetForm({ ...targetForm, name: event.target.value })
+              }
               required
             />
           </label>
-        )}
 
-        {options.isEditing && (
-          <p className="locked-field">Cedula usada para gestionar: {targetForm.identityCard}. No se puede editar.</p>
-        )}
-
-        <label>
-          Nombre o alias
-          <input value={targetForm.name} onChange={(event) => setTargetForm({ ...targetForm, name: event.target.value })} required />
-        </label>
-
-        <label>
-          Contacto o WhatsApp
-          <input
+          <ContactInput
             value={targetForm.contact}
-            onChange={(event) => setTargetForm({ ...targetForm, contact: event.target.value })}
-            required
+            onChange={(contact) => setTargetForm({ ...targetForm, contact })}
           />
-        </label>
+        </fieldset>
 
-        <label>
-          Zona o referencia
-          <input
-            value={targetForm.locationLabel}
-            onChange={(event) => setTargetForm({ ...targetForm, locationLabel: event.target.value })}
-            required
-          />
-        </label>
+        <fieldset className="form-section">
+          <legend>Ubicación</legend>
 
-        <div className="grid-two">
           <label>
-            Latitud
+            <span>
+              Zona o referencia <RequiredMark />
+            </span>
             <input
-              type="number"
-              step="0.000001"
-              value={targetForm.latitude}
-              onChange={(event) => setTargetForm({ ...targetForm, latitude: Number(event.target.value) })}
+              list={locationOptionsId}
+              placeholder="Escribe código postal, ciudad o estado"
+              value={targetForm.locationLabel}
+              onBlur={(event) =>
+                event.currentTarget.setCustomValidity(
+                  isVenezuelaLocationOption(event.currentTarget.value)
+                    ? ""
+                    : "Selecciona una zona válida de la lista.",
+                )
+              }
+              onChange={(event) => {
+                const nextLocationLabel = event.target.value;
+                event.target.setCustomValidity(
+                  nextLocationLabel === "" ||
+                    isVenezuelaLocationOption(nextLocationLabel)
+                    ? ""
+                    : "Selecciona una zona válida de la lista.",
+                );
+                setTargetForm({
+                  ...targetForm,
+                  locationLabel: nextLocationLabel,
+                });
+              }}
               required
             />
+            <datalist id={locationOptionsId}>
+              {venezuelaLocationOptions.map((locationOption) => (
+                <option key={locationOption} value={locationOption} />
+              ))}
+            </datalist>
           </label>
-          <label>
-            Longitud
-            <input
-              type="number"
-              step="0.000001"
-              value={targetForm.longitude}
-              onChange={(event) => setTargetForm({ ...targetForm, longitude: Number(event.target.value) })}
-              required
-            />
-          </label>
-        </div>
 
-        <label className="switch-row">
-          <input
-            checked={isAnyTime}
-            onChange={(event) =>
-              setTargetForm({
-                ...targetForm,
-                timeFrom: event.target.checked ? null : '08:00',
-                timeTo: event.target.checked ? null : '18:00'
-              })
-            }
-            type="checkbox"
-          />
-          Cualquier momento
-        </label>
-
-        {!isAnyTime && (
-          <div className="grid-two">
-            <label>
-              Inicio
-              <input
-                type="time"
-                value={targetForm.timeFrom ?? ''}
-                onChange={(event) => setTargetForm({ ...targetForm, timeFrom: event.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Fin
-              <input
-                type="time"
-                value={targetForm.timeTo ?? ''}
-                onChange={(event) => setTargetForm({ ...targetForm, timeTo: event.target.value })}
-                required
-              />
-            </label>
-          </div>
-        )}
-
-        {isNeedForm && (
-          <label>
-            Urgencia
-            <select
-              value={targetForm.urgency}
-              onChange={(event) => setTargetForm({ ...targetForm, urgency: event.target.value as typeof targetForm.urgency })}
+          <div className="coordinates-row">
+            <div className="grid-two coordinates-fields">
+              <label>
+                <span>
+                  Latitud <RequiredMark />
+                </span>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={targetForm.latitude}
+                  onChange={(event) =>
+                    setTargetForm({
+                      ...targetForm,
+                      latitude: Number(event.target.value),
+                    })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                <span>
+                  Longitud <RequiredMark />
+                </span>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={targetForm.longitude}
+                  onChange={(event) =>
+                    setTargetForm({
+                      ...targetForm,
+                      longitude: Number(event.target.value),
+                    })
+                  }
+                  required
+                />
+              </label>
+            </div>
+            <button
+              className="secondary-button location-button"
+              onClick={() => useCurrentLocation(targetForm, setTargetForm)}
+              type="button"
             >
-              <option value="LOW">Baja</option>
-              <option value="MEDIUM">Media</option>
-              <option value="HIGH">Alta</option>
-            </select>
-          </label>
-        )}
-
-        <fieldset>
-          <legend>{isNeedForm ? 'Que ayudas necesitas?' : 'Que ayudas puedes ofrecer?'}</legend>
-          <div className="chips">
-            {helpTypes.map((type) => (
-              <button
-                className={targetForm.helpTypeSlugs.includes(type.slug) ? 'chip selected' : 'chip'}
-                key={type.slug}
-                onClick={() => toggleHelpType(type.slug, targetForm, setTargetForm)}
-                type="button"
-              >
-                {type.name}
-              </button>
-            ))}
+              <MapPin size={16} />
+              Utilizar mi ubicación actual
+            </button>
           </div>
         </fieldset>
 
-        <label>
-          Descripcion
-          <textarea
-            maxLength={descriptionMaxLength}
-            value={targetForm.description}
-            onChange={(event) => setTargetForm({ ...targetForm, description: event.target.value })}
-            required
-          />
-          <span className="character-count">
-            {targetForm.description.length}/{descriptionMaxLength}
-          </span>
-        </label>
+        <fieldset className="form-section">
+          <legend>
+            {isNeedForm
+              ? "¿Cuándo necesitas ayuda?"
+              : "¿Cuándo puedes ayudar?"}
+          </legend>
+
+          <label className="switch-row">
+            <input
+              checked={isAnyTime}
+              onChange={(event) =>
+                setTargetForm({
+                  ...targetForm,
+                  timeFrom: event.target.checked ? null : "08:00",
+                  timeTo: event.target.checked ? null : "18:00",
+                })
+              }
+              type="checkbox"
+            />
+            Cualquier momento
+          </label>
+
+          {!isAnyTime && (
+            <div className="grid-two">
+              <label>
+                <span>
+                  Inicio <RequiredMark />
+                </span>
+                <input
+                  type="time"
+                  value={targetForm.timeFrom ?? ""}
+                  onChange={(event) =>
+                    setTargetForm({
+                      ...targetForm,
+                      timeFrom: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                <span>
+                  Fin <RequiredMark />
+                </span>
+                <input
+                  type="time"
+                  value={targetForm.timeTo ?? ""}
+                  onChange={(event) =>
+                    setTargetForm({ ...targetForm, timeTo: event.target.value })
+                  }
+                  required
+                />
+              </label>
+            </div>
+          )}
+        </fieldset>
+
+        <fieldset className="form-section">
+          <legend>Detalles de la ayuda</legend>
+
+          {isNeedForm && (
+            <label>
+              <span>
+                Urgencia <RequiredMark />
+              </span>
+              <select
+                value={targetForm.urgency}
+                onChange={(event) =>
+                  setTargetForm({
+                    ...targetForm,
+                    urgency: event.target.value as typeof targetForm.urgency,
+                  })
+                }
+              >
+                <option value="LOW">Baja</option>
+                <option value="MEDIUM">Media</option>
+                <option value="HIGH">Alta</option>
+              </select>
+            </label>
+          )}
+
+          <fieldset>
+            <legend>
+              {isNeedForm
+                ? "¿Qué ayudas necesitas?"
+                : "¿Qué ayudas puedes ofrecer?"}{" "}
+              <RequiredMark />
+            </legend>
+            <div className="chips">
+              {helpTypes.map((type) => (
+                <button
+                  className={
+                    targetForm.helpTypeSlugs.includes(type.slug)
+                      ? "chip selected"
+                      : "chip"
+                  }
+                  key={type.slug}
+                  onClick={() =>
+                    toggleHelpType(type.slug, targetForm, setTargetForm)
+                  }
+                  type="button"
+                >
+                  {type.name}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          <label>
+            <span>
+              Descripción <RequiredMark />
+            </span>
+            <textarea
+              maxLength={descriptionMaxLength}
+              value={targetForm.description}
+              onChange={(event) =>
+                setTargetForm({
+                  ...targetForm,
+                  description: event.target.value,
+                })
+              }
+              required
+            />
+            <span className="character-count">
+              {targetForm.description.length}/{descriptionMaxLength}
+            </span>
+          </label>
+        </fieldset>
 
         <button className="primary-button" type="submit">
           <Send size={18} />
-          {options.isEditing ? 'Guardar cambios' : isNeedForm ? 'Solicitar ayuda' : 'Ofrecer ayuda'}
+          {options.isEditing
+            ? "Guardar cambios"
+            : isNeedForm
+              ? "Solicitar ayuda"
+              : "Ofrecer ayuda"}
         </button>
       </form>
     );
   }
 
-  if (path === '/mapa') {
+  if (path === "/mapa") {
     return (
       <main className="map-shell">
         <header className="map-header">
-          <button className="back-button" onClick={() => navigate('/')} type="button">
+          <button
+            className="back-button"
+            onClick={() => navigate("/")}
+            type="button"
+          >
             <ArrowLeft size={18} />
             Volver
           </button>
@@ -467,16 +936,23 @@ export function App() {
           </div>
         </header>
 
-        <section className="map-fullscreen" aria-label="Mapa de puntos de ayuda">
+        <section
+          className="map-fullscreen"
+          aria-label="Mapa de puntos de ayuda"
+        >
           <div className="leaflet-map" ref={mapCanvasRef} />
           <aside className="map-posts-panel">
             <h2>Publicaciones visibles</h2>
-            {mapPosts.length === 0 && <p>No hay publicaciones activas todavia.</p>}
+            {mapPosts.length === 0 && (
+              <p>No hay publicaciones activas todavia.</p>
+            )}
             {mapPosts.map((post) => (
               <article className="map-post-card" key={post.id}>
                 <div className="post-head">
-                  <strong>{post.kind === 'NEED' ? 'Necesita ayuda' : 'Ofrece ayuda'}</strong>
-                  <span>{post.urgency ?? 'Oferta'}</span>
+                  <strong>
+                    {post.kind === "NEED" ? "Necesita ayuda" : "Ofrece ayuda"}
+                  </strong>
+                  <span>{post.urgency ?? "Oferta"}</span>
                 </div>
                 <p>{post.locationLabel}</p>
                 <small>{getTimeLabel(post)}</small>
@@ -489,39 +965,45 @@ export function App() {
           </aside>
           <div className="map-status">
             <MapPin size={18} />
-            <span>Los puntos se muestran de forma aproximada para proteger a las personas.</span>
+            <span>
+              Los puntos se muestran de forma aproximada para proteger a las
+              personas.
+            </span>
           </div>
         </section>
       </main>
     );
   }
 
-  if (path === '/mis-publicaciones') {
+  if (path === "/mis-publicaciones") {
     return (
       <main className="app-shell">
         <section className="owner-page">
-          <button className="back-button" onClick={() => navigate('/')} type="button">
+          <button
+            className="back-button"
+            onClick={() => navigate("/")}
+            type="button"
+          >
             <ArrowLeft size={18} />
             Volver
           </button>
 
-          <form className="panel form" onSubmit={(event) => void loadOwnerPosts(event)}>
+          <form
+            className="panel form"
+            onSubmit={(event) => void loadOwnerPosts(event)}
+          >
             <div className="section-title">
               <Pencil size={20} />
               <div>
-                <p className="eyebrow">Gestion por cedula</p>
+                <p className="eyebrow">Gestión por cédula</p>
                 <h1>Mis publicaciones</h1>
               </div>
             </div>
-            <label>
-              Cedula de identidad
-              <input
-                placeholder="Ej: V-12345678"
-                value={ownerIdentityCard}
-                onChange={(event) => setOwnerIdentityCard(event.target.value)}
-                required
-              />
-            </label>
+            <IdentityCardInput
+              label="Cédula de identidad"
+              value={ownerIdentityCard}
+              onChange={setOwnerIdentityCard}
+            />
             <button className="primary-button" type="submit">
               Buscar publicaciones
             </button>
@@ -529,7 +1011,12 @@ export function App() {
 
           {editingForm && (
             <section>
-              {renderPostForm(editingForm, setEditingForm, (event) => void handleEditSubmit(event), { isEditing: true })}
+              {renderPostForm(
+                editingForm,
+                setEditingForm,
+                (event) => void handleEditSubmit(event),
+                { isEditing: true },
+              )}
             </section>
           )}
 
@@ -537,7 +1024,9 @@ export function App() {
             {ownerPosts.map((post) => (
               <article className="panel post-card" key={post.id}>
                 <div className="post-head">
-                  <strong>{post.kind === 'NEED' ? 'Solicitud' : 'Oferta'}</strong>
+                  <strong>
+                    {post.kind === "NEED" ? "Solicitud" : "Oferta"}
+                  </strong>
                   <span>{getStatusLabel(post.status)}</span>
                 </div>
                 <h3>{post.locationLabel}</h3>
@@ -548,22 +1037,36 @@ export function App() {
                     className="secondary-button"
                     onClick={() => {
                       setEditingPostId(post.id);
-                      setEditingForm(createFormFromPost(post, ownerIdentityCard));
+                      setEditingForm(
+                        createFormFromPost(post, ownerIdentityCard),
+                      );
                     }}
                     type="button"
                   >
                     <Pencil size={16} />
                     Editar
                   </button>
-                  <button className="secondary-button" onClick={() => void changeStatus(post.id, 'ACTIVE')} type="button">
+                  <button
+                    className="secondary-button"
+                    onClick={() => void changeStatus(post.id, "ACTIVE")}
+                    type="button"
+                  >
                     <Eye size={16} />
                     Mostrar
                   </button>
-                  <button className="secondary-button" onClick={() => void changeStatus(post.id, 'HIDDEN')} type="button">
+                  <button
+                    className="secondary-button"
+                    onClick={() => void changeStatus(post.id, "HIDDEN")}
+                    type="button"
+                  >
                     <EyeOff size={16} />
                     Ocultar
                   </button>
-                  <button className="danger-button" onClick={() => void changeStatus(post.id, 'DELETED')} type="button">
+                  <button
+                    className="danger-button"
+                    onClick={() => void changeStatus(post.id, "DELETED")}
+                    type="button"
+                  >
                     <Trash2 size={16} />
                     Eliminar
                   </button>
@@ -584,15 +1087,23 @@ export function App() {
       <main className="home-shell">
         <section className="home-content">
           <h1>Help Venezuela</h1>
-          <p>Que necesitas?</p>
+          <p>¿Que necesitas?</p>
           <div className="choice-grid">
-            <button className="choice-card" onClick={() => navigate('/formulario/ayudar')} type="button">
+            <button
+              className="choice-card"
+              onClick={() => navigate("/formulario/ayudar")}
+              type="button"
+            >
               <HandHeart size={32} />
               <span>Ayudar</span>
             </button>
-            <button className="choice-card" onClick={() => navigate('/formulario/ser-ayudado')} type="button">
+            <button
+              className="choice-card"
+              onClick={() => navigate("/formulario/ser-ayudado")}
+              type="button"
+            >
               <LifeBuoy size={32} />
-              <span>Ser ayudado</span>
+              <span>Solicitar ayuda</span>
             </button>
           </div>
           <div className="home-links">
@@ -601,7 +1112,7 @@ export function App() {
               href="/mapa"
               onClick={(event) => {
                 event.preventDefault();
-                navigate('/mapa');
+                navigate("/mapa");
               }}
             >
               <MapPin size={18} />
@@ -612,7 +1123,7 @@ export function App() {
               href="/mis-publicaciones"
               onClick={(event) => {
                 event.preventDefault();
-                navigate('/mis-publicaciones');
+                navigate("/mis-publicaciones");
               }}
             >
               <Pencil size={18} />
@@ -627,12 +1138,18 @@ export function App() {
   return (
     <main className="app-shell">
       <section className="form-page">
-        <button className="back-button" onClick={() => navigate('/')} type="button">
+        <button
+          className="back-button"
+          onClick={() => navigate("/")}
+          type="button"
+        >
           <ArrowLeft size={18} />
           Volver
         </button>
 
-        {renderPostForm(form, setForm, (event) => void handleSubmit(event), { isEditing: false })}
+        {renderPostForm(form, setForm, (event) => void handleSubmit(event), {
+          isEditing: false,
+        })}
 
         {message && <p className="notice">{message}</p>}
         {error && <p className="notice error">{error}</p>}
