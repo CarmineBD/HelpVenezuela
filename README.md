@@ -21,6 +21,8 @@ pnpm db:migrate
 pnpm dev
 ```
 
+En Windows, `docker compose up -d` requiere que Docker Desktop esté abierto y usando Linux containers.
+
 Si `corepack enable` falla por permisos en Windows, puedes usar:
 
 ```bash

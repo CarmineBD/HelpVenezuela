@@ -7,14 +7,15 @@
     "dev": "pnpm --parallel --filter @help-venezuela/shared --filter @help-venezuela/api --filter @help-venezuela/web dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @help-venezuela/shared build && pnpm -r typecheck",
-    "db:generate": "pnpm --filter @help-venezuela/api exec prisma generate --schema ../../prisma/schema.prisma",
-    "db:migrate": "pnpm --filter @help-venezuela/api exec prisma migrate dev --schema ../../prisma/schema.prisma",
-    "db:studio": "pnpm --filter @help-venezuela/api exec prisma studio --schema ../../prisma/schema.prisma"
+    "db:generate": "dotenv -e .env -- pnpm --filter @help-venezuela/api exec prisma generate --schema ../../prisma/schema.prisma",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @help-venezuela/api exec prisma migrate dev --schema ../../prisma/schema.prisma",
+    "db:studio": "dotenv -e .env -- pnpm --filter @help-venezuela/api exec prisma studio --schema ../../prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0"
   },
   "devDependencies": {
+    "dotenv-cli": "^7.4.4",
     "prisma": "^6.1.0",
     "typescript": "^5.7.2"
   }

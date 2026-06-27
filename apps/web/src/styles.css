@@ -25,6 +25,82 @@ textarea {
   padding: 24px;
 }
 
+.home-shell {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.home-content {
+  max-width: 760px;
+  text-align: center;
+  width: 100%;
+}
+
+.home-content h1 {
+  font-size: clamp(3rem, 9vw, 6rem);
+  line-height: 1;
+  margin-bottom: 18px;
+}
+
+.home-content p {
+  color: #405246;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  margin-bottom: 36px;
+}
+
+.choice-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choice-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d9e2d9;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgb(23 32 38 / 8%);
+  color: #172026;
+  cursor: pointer;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  min-height: 180px;
+  padding: 28px;
+}
+
+.choice-card:hover {
+  border-color: #217c58;
+}
+
+.choice-card span {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.form-page {
+  display: grid;
+  gap: 16px;
+  margin: 0 auto;
+  max-width: 680px;
+}
+
+.back-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #405246;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+  justify-self: start;
+  padding: 0;
+}
+
 .topbar {
   align-items: center;
   display: flex;
@@ -74,6 +150,10 @@ h1 {
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.section-title h1 {
+  font-size: 2rem;
 }
 
 .section-title h2 {
@@ -202,6 +282,12 @@ textarea {
   padding: 10px;
 }
 
+.notice.error {
+  background: #fff2f2;
+  border-color: #f2bcbc;
+  color: #8a2424;
+}
+
 .feed {
   min-height: 640px;
 }
@@ -271,6 +357,10 @@ textarea {
   }
 
   .grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .choice-grid {
     grid-template-columns: 1fr;
   }
 }

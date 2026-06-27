@@ -1,52 +1,86 @@
 import { helpTypes, type CreateHelpPostInput } from '@help-venezuela/shared';
-import { HandHeart, MapPin, RefreshCw, Send } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { createHelpPost, getHelpPosts, type HelpPost } from './api';
+import { ArrowLeft, HandHeart, LifeBuoy, Send } from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { createHelpPost } from './api';
 
 type HelpPostForm = CreateHelpPostInput & {
   urgency: 'LOW' | 'MEDIUM' | 'HIGH';
 };
 
-const initialForm: HelpPostForm = {
-  kind: 'NEED',
-  name: '',
-  contact: '',
-  locationLabel: '',
-  latitude: 10.4806,
-  longitude: -66.9036,
-  dateFrom: '',
-  dateTo: '',
-  timeSlot: '',
-  urgency: 'MEDIUM',
-  description: '',
-  helpTypeSlugs: [] as string[]
-};
+type FormKind = 'NEED' | 'OFFER';
+
+function createInitialForm(kind: FormKind): HelpPostForm {
+  return {
+    kind,
+    name: '',
+    contact: '',
+    locationLabel: '',
+    latitude: 10.4806,
+    longitude: -66.9036,
+    dateFrom: '',
+    dateTo: '',
+    timeSlot: '',
+    urgency: 'MEDIUM',
+    description: '',
+    helpTypeSlugs: []
+  };
+}
+
+function getCurrentPath() {
+  return window.location.pathname;
+}
 
 export function App() {
-  const [posts, setPosts] = useState<HelpPost[]>([]);
-  const [form, setForm] = useState(initialForm);
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  async function loadPosts() {
-    setIsLoading(true);
-    try {
-      setPosts(await getHelpPosts());
-    } finally {
-      setIsLoading(false);
+  const [path, setPath] = useState(getCurrentPath);
+  const formKind = useMemo<FormKind | null>(() => {
+    if (path === '/formulario/ayudar') {
+      return 'OFFER';
     }
-  }
+
+    if (path === '/formulario/ser-ayudado') {
+      return 'NEED';
+    }
+
+    return null;
+  }, [path]);
+  const [form, setForm] = useState<HelpPostForm>(() => createInitialForm(formKind ?? 'NEED'));
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    void loadPosts();
+    function syncPath() {
+      setPath(getCurrentPath());
+    }
+
+    window.addEventListener('popstate', syncPath);
+    return () => window.removeEventListener('popstate', syncPath);
   }, []);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (formKind) {
+      setForm(createInitialForm(formKind));
+      setMessage('');
+      setError('');
+    }
+  }, [formKind]);
+
+  function navigate(nextPath: string) {
+    window.history.pushState(null, '', nextPath);
+    setPath(nextPath);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const response = await createHelpPost(form);
-    setMessage(`Publicación creada. Guarda este token para cerrar/borrar: ${response.deleteToken}`);
-    setForm(initialForm);
-    await loadPosts();
+    setMessage('');
+    setError('');
+
+    try {
+      const response = await createHelpPost(form);
+      setMessage(`Publicacion creada. Guarda este token para cerrar o borrar: ${response.deleteToken}`);
+      setForm(createInitialForm(form.kind));
+    } catch {
+      setError('No se pudo crear la publicacion. Revisa los campos e intenta otra vez.');
+    }
   }
 
   function toggleHelpType(slug: string) {
@@ -58,40 +92,44 @@ export function App() {
     }));
   }
 
+  if (!formKind) {
+    return (
+      <main className="home-shell">
+        <section className="home-content">
+          <h1>Help Venezuela</h1>
+          <p>Que necesitas?</p>
+          <div className="choice-grid">
+            <button className="choice-card" onClick={() => navigate('/formulario/ayudar')} type="button">
+              <HandHeart size={32} />
+              <span>Ayudar</span>
+            </button>
+            <button className="choice-card" onClick={() => navigate('/formulario/ser-ayudado')} type="button">
+              <LifeBuoy size={32} />
+              <span>Ser ayudado</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const isNeedForm = formKind === 'NEED';
+
   return (
     <main className="app-shell">
-      <section className="topbar">
-        <div>
-          <p className="eyebrow">Ayuda coordinada</p>
-          <h1>Help Venezuela</h1>
-        </div>
-        <button className="icon-button" onClick={() => void loadPosts()} type="button" aria-label="Recargar publicaciones">
-          <RefreshCw size={20} />
+      <section className="form-page">
+        <button className="back-button" onClick={() => navigate('/')} type="button">
+          <ArrowLeft size={18} />
+          Volver
         </button>
-      </section>
 
-      <section className="layout">
         <form className="panel form" onSubmit={(event) => void handleSubmit(event)}>
           <div className="section-title">
-            <HandHeart size={20} />
-            <h2>Publicar ayuda</h2>
-          </div>
-
-          <div className="segmented">
-            <button
-              className={form.kind === 'NEED' ? 'active' : ''}
-              onClick={() => setForm((current) => ({ ...current, kind: 'NEED' }))}
-              type="button"
-            >
-              Necesito ayuda
-            </button>
-            <button
-              className={form.kind === 'OFFER' ? 'active' : ''}
-              onClick={() => setForm((current) => ({ ...current, kind: 'OFFER' }))}
-              type="button"
-            >
-              Quiero ayudar
-            </button>
+            {isNeedForm ? <LifeBuoy size={20} /> : <HandHeart size={20} />}
+            <div>
+              <p className="eyebrow">{isNeedForm ? 'Solicitud de ayuda' : 'Oferta voluntaria'}</p>
+              <h1>{isNeedForm ? 'Ser ayudado' : 'Ayudar'}</h1>
+            </div>
           </div>
 
           <label>
@@ -155,14 +193,14 @@ export function App() {
           <label>
             Horario
             <input
-              placeholder="Ej: mañana, tarde, 09:00-13:00"
+              placeholder="Ej: manana, tarde, 09:00-13:00"
               value={form.timeSlot}
               onChange={(event) => setForm({ ...form, timeSlot: event.target.value })}
               required
             />
           </label>
 
-          {form.kind === 'NEED' && (
+          {isNeedForm && (
             <label>
               Urgencia
               <select value={form.urgency} onChange={(event) => setForm({ ...form, urgency: event.target.value as typeof form.urgency })}>
@@ -174,7 +212,7 @@ export function App() {
           )}
 
           <fieldset>
-            <legend>Tipos de ayuda</legend>
+            <legend>{isNeedForm ? 'Que ayudas necesitas?' : 'Que ayudas puedes ofrecer?'}</legend>
             <div className="chips">
               {helpTypes.map((type) => (
                 <button
@@ -190,38 +228,18 @@ export function App() {
           </fieldset>
 
           <label>
-            Descripción
+            Descripcion
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} required />
           </label>
 
           <button className="primary-button" type="submit">
             <Send size={18} />
-            Publicar
+            {isNeedForm ? 'Solicitar ayuda' : 'Ofrecer ayuda'}
           </button>
-          {message && <p className="notice">{message}</p>}
-        </form>
 
-        <section className="panel feed">
-          <div className="section-title">
-            <MapPin size={20} />
-            <h2>Publicaciones activas</h2>
-          </div>
-          <div className="map-placeholder">Mapa pendiente: Leaflet queda instalado para la siguiente iteración.</div>
-          {isLoading ? <p>Cargando...</p> : null}
-          <div className="post-list">
-            {posts.map((post) => (
-              <article className="post-card" key={post.id}>
-                <div className="post-head">
-                  <strong>{post.kind === 'NEED' ? 'Necesita ayuda' : 'Ofrece ayuda'}</strong>
-                  {post.urgency && <span>{post.urgency}</span>}
-                </div>
-                <h3>{post.locationLabel}</h3>
-                <p>{post.description}</p>
-                <small>{post.helpTypes.map((item) => item.helpType.name).join(', ')}</small>
-              </article>
-            ))}
-          </div>
-        </section>
+          {message && <p className="notice">{message}</p>}
+          {error && <p className="notice error">{error}</p>}
+        </form>
       </section>
     </main>
   );
