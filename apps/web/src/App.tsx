@@ -1,5 +1,5 @@
 import { helpTypes, type CreateHelpPostInput } from '@help-venezuela/shared';
-import { ArrowLeft, HandHeart, LifeBuoy, Send } from 'lucide-react';
+import { ArrowLeft, HandHeart, LifeBuoy, MapPin, Send } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createHelpPost } from './api';
 
@@ -92,6 +92,38 @@ export function App() {
     }));
   }
 
+  if (path === '/mapa') {
+    return (
+      <main className="map-shell">
+        <header className="map-header">
+          <button className="back-button" onClick={() => navigate('/')} type="button">
+            <ArrowLeft size={18} />
+            Volver
+          </button>
+          <div>
+            <p className="eyebrow">Vista publica</p>
+            <h1>Mapa de ayuda</h1>
+          </div>
+        </header>
+
+        <section className="map-fullscreen" aria-label="Mapa de puntos de ayuda">
+          <iframe
+            allowFullScreen
+            className="google-map"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            src="https://www.google.com/maps?q=Venezuela&z=6&output=embed"
+            title="Mapa de ayuda en Venezuela"
+          />
+          <div className="map-status">
+            <MapPin size={18} />
+            <span>Los puntos de ayuda apareceran aqui cuando haya publicaciones registradas.</span>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   if (!formKind) {
     return (
       <main className="home-shell">
@@ -108,6 +140,17 @@ export function App() {
               <span>Ser ayudado</span>
             </button>
           </div>
+          <a
+            className="home-map-link"
+            href="/mapa"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate('/mapa');
+            }}
+          >
+            <MapPin size={18} />
+            Ver mapa
+          </a>
         </section>
       </main>
     );
