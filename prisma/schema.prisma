@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum HelpPostKind {
+  NEED
+  OFFER
+}
+
+enum HelpPostStatus {
+  ACTIVE
+  MATCHED
+  CLOSED
+  REPORTED
+}
+
+enum Urgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model HelpPost {
+  id            String         @id @default(cuid())
+  kind          HelpPostKind
+  name          String
+  contact       String
+  locationLabel String
+  latitude      Float
+  longitude     Float
+  dateFrom      DateTime
+  dateTo        DateTime
+  timeSlot      String
+  urgency       Urgency?
+  description   String
+  status        HelpPostStatus @default(ACTIVE)
+  deleteToken   String         @unique
+  helpTypes     HelpPostType[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([kind, status])
+  @@index([latitude, longitude])
+}
+
+model HelpType {
+  id        String         @id @default(cuid())
+  slug      String         @unique
+  name      String
+  helpPosts HelpPostType[]
+}
+
+model HelpPostType {
+  helpPostId String
+  helpTypeId String
+  helpPost   HelpPost @relation(fields: [helpPostId], references: [id], onDelete: Cascade)
+  helpType   HelpType @relation(fields: [helpTypeId], references: [id], onDelete: Cascade)
+
+  @@id([helpPostId, helpTypeId])
+}
