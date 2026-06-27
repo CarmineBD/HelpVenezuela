@@ -14,8 +14,9 @@ enum HelpPostKind {
 
 enum HelpPostStatus {
   ACTIVE
-  MATCHED
+  HIDDEN
   CLOSED
+  DELETED
   REPORTED
 }
 
@@ -25,33 +26,50 @@ enum Urgency {
   HIGH
 }
 
+model Person {
+  id           String     @id @default(cuid())
+  identityCard String     @unique
+  name         String?
+  contact      String?
+  helpPosts    HelpPost[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
 model HelpPost {
   id            String         @id @default(cuid())
+  personId      String
+  person        Person         @relation(fields: [personId], references: [id], onDelete: Cascade)
   kind          HelpPostKind
   name          String
   contact       String
   locationLabel String
   latitude      Float
   longitude     Float
-  dateFrom      DateTime
-  dateTo        DateTime
-  timeSlot      String
+  publicLatitude  Float
+  publicLongitude Float
+  timeFrom      String?
+  timeTo        String?
   urgency       Urgency?
   description   String
   status        HelpPostStatus @default(ACTIVE)
-  deleteToken   String         @unique
   helpTypes     HelpPostType[]
+  reports       HelpPostReport[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
+  @@index([personId])
   @@index([kind, status])
-  @@index([latitude, longitude])
+  @@index([publicLatitude, publicLongitude])
+  @@index([timeFrom, timeTo])
 }
 
 model HelpType {
   id        String         @id @default(cuid())
   slug      String         @unique
   name      String
+  active    Boolean        @default(true)
+  sortOrder Int            @default(0)
   helpPosts HelpPostType[]
 }
 
@@ -62,4 +80,16 @@ model HelpPostType {
   helpType   HelpType @relation(fields: [helpTypeId], references: [id], onDelete: Cascade)
 
   @@id([helpPostId, helpTypeId])
+  @@index([helpTypeId])
+}
+
+model HelpPostReport {
+  id         String   @id @default(cuid())
+  helpPostId String
+  reason     String
+  message    String?
+  helpPost   HelpPost @relation(fields: [helpPostId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([helpPostId])
 }

@@ -81,13 +81,21 @@ textarea {
   font-weight: 800;
 }
 
+.home-links {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
 .home-map-link {
   align-items: center;
   color: #217c58;
   display: inline-flex;
   font-weight: 800;
   gap: 8px;
-  margin-top: 24px;
   text-decoration: none;
 }
 
@@ -100,6 +108,13 @@ textarea {
   gap: 16px;
   margin: 0 auto;
   max-width: 680px;
+}
+
+.owner-page {
+  display: grid;
+  gap: 16px;
+  margin: 0 auto;
+  max-width: 860px;
 }
 
 .back-button {
@@ -216,6 +231,33 @@ textarea {
   grid-template-columns: 1fr 1fr;
 }
 
+.switch-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.switch-row input {
+  height: 18px;
+  width: 18px;
+}
+
+.character-count {
+  color: #55705d;
+  font-size: 0.8rem;
+  font-weight: 600;
+  justify-self: end;
+}
+
+.locked-field {
+  background: #eef3ef;
+  border-radius: 6px;
+  color: #405246;
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 10px 12px;
+}
+
 .segmented {
   background: #edf2ed;
   border-radius: 8px;
@@ -227,7 +269,9 @@ textarea {
 .segmented button,
 .chip,
 .icon-button,
-.primary-button {
+.primary-button,
+.secondary-button,
+.danger-button {
   border: 0;
   cursor: pointer;
 }
@@ -265,7 +309,9 @@ textarea {
 }
 
 .primary-button,
-.icon-button {
+.icon-button,
+.secondary-button,
+.danger-button {
   align-items: center;
   border-radius: 7px;
   display: inline-flex;
@@ -285,6 +331,22 @@ textarea {
   color: #172026;
   height: 44px;
   width: 44px;
+}
+
+.secondary-button,
+.danger-button {
+  gap: 6px;
+  padding: 9px 11px;
+}
+
+.secondary-button {
+  background: #eef3ef;
+  color: #405246;
+}
+
+.danger-button {
+  background: #fff2f2;
+  color: #8a2424;
 }
 
 .notice {
@@ -328,12 +390,34 @@ textarea {
   position: relative;
 }
 
-.google-map {
-  border: 0;
+.leaflet-map {
+  background: #e7eee7;
   display: block;
   height: 100%;
   min-height: calc(100vh - 93px);
   width: 100%;
+}
+
+.map-marker {
+  align-items: center;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgb(23 32 38 / 24%);
+  color: #ffffff;
+  display: flex;
+  font-size: 0.85rem;
+  font-weight: 900;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.map-marker.need {
+  background: #c73535;
+}
+
+.map-marker.offer {
+  background: #217c58;
 }
 
 .map-status {
@@ -353,6 +437,42 @@ textarea {
   padding: 10px 14px;
   position: absolute;
   transform: translateX(-50%);
+  z-index: 500;
+}
+
+.map-posts-panel {
+  background: #ffffff;
+  border: 1px solid #d9e2d9;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgb(23 32 38 / 14%);
+  display: grid;
+  gap: 12px;
+  left: 20px;
+  max-height: calc(100% - 40px);
+  max-width: 380px;
+  overflow: auto;
+  padding: 16px;
+  position: absolute;
+  top: 20px;
+  width: calc(100% - 40px);
+  z-index: 500;
+}
+
+.map-posts-panel h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.map-post-card {
+  border: 1px solid #d9e2d9;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.map-post-card p {
+  margin: 0;
 }
 
 .feed {
@@ -414,6 +534,13 @@ textarea {
   color: #55705d;
 }
 
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     padding: 16px;
@@ -438,7 +565,7 @@ textarea {
     padding: 14px 16px;
   }
 
-  .google-map {
+  .leaflet-map {
     min-height: calc(100vh - 129px);
   }
 
@@ -449,5 +576,13 @@ textarea {
     left: 16px;
     right: 16px;
     transform: none;
+  }
+
+  .map-posts-panel {
+    left: 16px;
+    max-height: 45%;
+    right: 16px;
+    top: 16px;
+    width: auto;
   }
 }
