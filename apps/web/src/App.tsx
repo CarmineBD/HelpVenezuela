@@ -1,7 +1,12 @@
 import {
   helpTypes,
+  isVenezuelaCityForState,
+  isVenezuelaState,
   type CreateHelpPostInput,
+  type LocationSource,
   type UpdateHelpPostInput,
+  venezuelaCitiesByState,
+  venezuelaStates,
 } from "@help-venezuela/shared";
 import L from "leaflet";
 import {
@@ -19,6 +24,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ApiError,
   createHelpPost,
+  getAddressSuggestions,
   getMapHelpPosts,
   getPersonPosts,
   updateHelpPost,
@@ -27,34 +33,49 @@ import {
   type HelpPostStatus,
   type PublicMapPost,
 } from "./api";
-import {
-  isVenezuelaLocationOption,
-  venezuelaLocationOptions,
-} from "./venezuelaLocations";
 
 type FormKind = "NEED" | "OFFER";
 type IdentityCardPrefix = "V" | "E";
 type ErrorContext = "create" | "update" | "loadOwnerPosts" | "status" | "map";
 
-type HelpPostForm = CreateHelpPostInput & {
+type HelpPostForm = {
+  identityCard: string;
+  kind: FormKind;
+  name: string;
+  contact: string;
+  locationSource: LocationSource;
+  state: string;
+  city: string;
+  address: string;
+  referencePoint: string;
+  latitude: number | null;
+  longitude: number | null;
+  timeFrom: string | null;
+  timeTo: string | null;
   urgency: "LOW" | "MEDIUM" | "HIGH";
+  description: string;
+  helpTypeSlugs: string[];
 };
 
 const descriptionMaxLength = 500;
 const fieldErrorMessages: Record<string, string> = {
-  contact: "El contacto debe incluir prefijo y un número válido.",
-  description: "La descripción debe tener entre 10 y 500 caracteres.",
+  address: "Indica una direccion valida.",
+  city: "Selecciona una ciudad valida para el estado.",
+  contact: "El contacto debe incluir prefijo y un numero valido.",
+  description: "La descripcion debe tener entre 10 y 500 caracteres.",
   helpTypeSlugs: "Selecciona al menos un tipo de ayuda.",
-  identityCard: "La cédula debe empezar por V o E y tener entre 5 y 12 números.",
+  identityCard: "La cedula debe empezar por V o E y tener entre 5 y 12 numeros.",
   latitude: "La latitud debe estar entre -90 y 90.",
-  locationLabel: "Selecciona una zona válida de la lista.",
+  locationSource: "Selecciona una fuente de ubicacion valida.",
   longitude: "La longitud debe estar entre -180 y 180.",
   name: "El nombre y apellidos deben tener entre 2 y 80 caracteres.",
-  status: "El estado seleccionado no es válido.",
-  timeFrom: "Indica una hora de inicio válida y anterior a la hora de fin.",
-  timeTo: "Indica una hora de fin válida y posterior a la hora de inicio.",
+  referencePoint: "El punto de referencia no puede superar 150 caracteres.",
+  state: "Selecciona un estado valido de Venezuela.",
+  status: "El estado seleccionado no es valido.",
+  timeFrom: "Indica una hora de inicio valida y anterior a la hora de fin.",
+  timeTo: "Indica una hora de fin valida y posterior a la hora de inicio.",
   urgency: "Selecciona la urgencia de la solicitud.",
-};
+}
 const identityCardPrefixes = ["V", "E"] as const;
 const countryDialCodes = [
   { country: "Venezuela", code: "+58" },
@@ -148,6 +169,10 @@ function getApiErrorMessage(error: unknown, context: ErrorContext) {
 
   if (!(error instanceof ApiError)) {
     return "Ocurrió un error inesperado. Intenta de nuevo.";
+  }
+
+  if (error.payload?.error === "LOCATION_NOT_FOUND") {
+    return "No se pudieron calcular coordenadas para esa direccion. Corrige la direccion o usa tu ubicacion actual.";
   }
 
   if (error.status === 400) {
@@ -301,9 +326,13 @@ function createInitialForm(kind: FormKind): HelpPostForm {
     kind,
     name: "",
     contact: "",
-    locationLabel: "",
-    latitude: 10.4806,
-    longitude: -66.9036,
+    locationSource: "ADDRESS",
+    state: "",
+    city: "",
+    address: "",
+    referencePoint: "",
+    latitude: null,
+    longitude: null,
     timeFrom: null,
     timeTo: null,
     urgency: "MEDIUM",
@@ -321,7 +350,11 @@ function createFormFromPost(
     kind: post.kind,
     name: post.name,
     contact: post.contact,
-    locationLabel: post.locationLabel,
+    locationSource: post.locationSource,
+    state: post.state ?? "",
+    city: post.city ?? "",
+    address: post.address ?? "",
+    referencePoint: post.referencePoint ?? "",
     latitude: post.latitude,
     longitude: post.longitude,
     timeFrom: post.timeFrom,
@@ -357,20 +390,108 @@ function getStatusLabel(status: HelpPostStatus) {
   return labels[status];
 }
 
-function toUpdateInput(form: HelpPostForm): UpdateHelpPostInput {
+function createCommonInput(form: HelpPostForm) {
   return {
-    identityCard: form.identityCard,
     name: form.name,
     contact: form.contact,
-    locationLabel: form.locationLabel,
-    latitude: form.latitude,
-    longitude: form.longitude,
     timeFrom: form.timeFrom,
     timeTo: form.timeTo,
     urgency: form.urgency,
     description: form.description,
     helpTypeSlugs: form.helpTypeSlugs,
   };
+}
+
+function toCreateInput(form: HelpPostForm): CreateHelpPostInput {
+  const commonInput = {
+    ...createCommonInput(form),
+    identityCard: form.identityCard,
+    kind: form.kind,
+  };
+
+  if (form.locationSource === "CURRENT_LOCATION") {
+    return {
+      ...commonInput,
+      locationSource: "CURRENT_LOCATION",
+      state: form.state,
+      city: form.city,
+      address: form.address,
+      referencePoint: form.referencePoint,
+      latitude: form.latitude ?? 0,
+      longitude: form.longitude ?? 0,
+    };
+  }
+
+  return {
+    ...commonInput,
+    locationSource: "ADDRESS",
+    state: form.state,
+    city: form.city,
+    address: form.address,
+    referencePoint: form.referencePoint,
+  };
+}
+
+function toUpdateInput(form: HelpPostForm): UpdateHelpPostInput {
+  const commonInput = {
+    ...createCommonInput(form),
+    identityCard: form.identityCard,
+  };
+
+  if (form.locationSource === "CURRENT_LOCATION") {
+    return {
+      ...commonInput,
+      locationSource: "CURRENT_LOCATION",
+      state: form.state,
+      city: form.city,
+      address: form.address,
+      referencePoint: form.referencePoint,
+      latitude: form.latitude ?? 0,
+      longitude: form.longitude ?? 0,
+    };
+  }
+
+  return {
+    ...commonInput,
+    locationSource: "ADDRESS",
+    state: form.state,
+    city: form.city,
+    address: form.address,
+    referencePoint: form.referencePoint,
+  };
+}
+
+function getCityOptions(state: string) {
+  const normalizedState = state.trim();
+  return isVenezuelaState(normalizedState)
+    ? [...venezuelaCitiesByState[normalizedState]]
+    : [];
+}
+
+function getLocationValidationMessage(form: HelpPostForm) {
+  if (form.locationSource === "CURRENT_LOCATION") {
+    return form.latitude !== null && form.longitude !== null
+      ? ""
+      : "Pulsa \"Utilizar mi ubicacion actual\" para obtener coordenadas.";
+  }
+
+  if (!isVenezuelaState(form.state)) {
+    return "Selecciona un estado valido de Venezuela.";
+  }
+
+  if (!isVenezuelaCityForState(form.state, form.city)) {
+    return "Selecciona una ciudad valida para el estado indicado.";
+  }
+
+  if (form.address.trim().length < 3) {
+    return "Indica una direccion suficientemente precisa.";
+  }
+
+  if (form.referencePoint.trim().length > 150) {
+    return "El punto de referencia no puede superar 150 caracteres.";
+  }
+
+  return "";
 }
 
 function createMarkerIcon(kind: PublicMapPost["kind"]) {
@@ -406,9 +527,11 @@ export function App() {
   const [ownerPosts, setOwnerPosts] = useState<HelpPost[]>([]);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingForm, setEditingForm] = useState<HelpPostForm | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<string[]>([]);
   const mapCanvasRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const addressSuggestionForm = editingForm ?? form;
 
   useEffect(() => {
     function syncPath() {
@@ -438,6 +561,36 @@ export function App() {
         setError(getApiErrorMessage(caughtError, "map")),
       );
   }, [path]);
+
+  useEffect(() => {
+    const query = addressSuggestionForm.address.trim();
+
+    if (addressSuggestionForm.locationSource !== "ADDRESS" || query.length < 3) {
+      setAddressSuggestions([]);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      getAddressSuggestions({
+        query,
+        state: addressSuggestionForm.state,
+        city: addressSuggestionForm.city,
+      })
+        .then((suggestions) =>
+          setAddressSuggestions(
+            suggestions.map((suggestion) => suggestion.description),
+          ),
+        )
+        .catch(() => setAddressSuggestions([]));
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    addressSuggestionForm.address,
+    addressSuggestionForm.city,
+    addressSuggestionForm.locationSource,
+    addressSuggestionForm.state,
+  ]);
 
   useEffect(() => {
     if (path !== "/mapa" || !mapCanvasRef.current) {
@@ -508,13 +661,15 @@ export function App() {
     setMessage("");
     setError("");
 
-    if (!isVenezuelaLocationOption(form.locationLabel)) {
-      setError("Selecciona una zona válida del autocompletado.");
+    const locationValidationMessage = getLocationValidationMessage(form);
+
+    if (locationValidationMessage) {
+      setError(locationValidationMessage);
       return;
     }
 
     try {
-      await createHelpPost(form);
+      await createHelpPost(toCreateInput(form));
       setMessage(
         "Publicación creada. Puedes gestionarla desde Mis publicaciones usando tu cédula.",
       );
@@ -552,8 +707,10 @@ export function App() {
     setMessage("");
     setError("");
 
-    if (!isVenezuelaLocationOption(editingForm.locationLabel)) {
-      setError("Selecciona una zona válida del autocompletado.");
+    const locationValidationMessage = getLocationValidationMessage(editingForm);
+
+    if (locationValidationMessage) {
+      setError(locationValidationMessage);
       return;
     }
 
@@ -596,6 +753,7 @@ export function App() {
       (position) => {
         setTargetForm({
           ...targetForm,
+          locationSource: "CURRENT_LOCATION",
           latitude: roundCoordinate(position.coords.latitude),
           longitude: roundCoordinate(position.coords.longitude),
         });
@@ -634,9 +792,16 @@ export function App() {
     const isNeedForm = targetForm.kind === "NEED";
     const isAnyTime =
       targetForm.timeFrom === null && targetForm.timeTo === null;
-    const locationOptionsId = options.isEditing
-      ? "venezuela-location-options-edit"
-      : "venezuela-location-options-create";
+    const stateOptionsId = options.isEditing
+      ? "venezuela-state-options-edit"
+      : "venezuela-state-options-create";
+    const cityOptionsId = options.isEditing
+      ? "venezuela-city-options-edit"
+      : "venezuela-city-options-create";
+    const addressOptionsId = options.isEditing
+      ? "venezuela-address-options-edit"
+      : "venezuela-address-options-create";
+    const cityOptions = getCityOptions(targetForm.state);
 
     return (
       <form className="panel form" onSubmit={onSubmit}>
@@ -689,90 +854,118 @@ export function App() {
           />
         </fieldset>
 
-        <fieldset className="form-section">
-          <legend>Ubicación</legend>
+                <fieldset className="form-section">
+          <legend>Ubicacion</legend>
+
+          <div className="grid-two">
+            <label>
+              <span>
+                Estado <RequiredMark />
+              </span>
+              <input
+                list={stateOptionsId}
+                placeholder="Ej. Miranda"
+                value={targetForm.state}
+                onChange={(event) =>
+                  setTargetForm({
+                    ...targetForm,
+                    locationSource: "ADDRESS",
+                    state: event.target.value,
+                    city: "",
+                    latitude: null,
+                    longitude: null,
+                  })
+                }
+              />
+              <datalist id={stateOptionsId}>
+                {venezuelaStates.map((state) => (
+                  <option key={state} value={state} />
+                ))}
+              </datalist>
+            </label>
+
+            <label>
+              <span>
+                Ciudad <RequiredMark />
+              </span>
+              <input
+                list={cityOptionsId}
+                placeholder="Ej. Caracas"
+                value={targetForm.city}
+                onChange={(event) =>
+                  setTargetForm({
+                    ...targetForm,
+                    locationSource: "ADDRESS",
+                    city: event.target.value,
+                    latitude: null,
+                    longitude: null,
+                  })
+                }
+              />
+              <datalist id={cityOptionsId}>
+                {cityOptions.map((city) => (
+                  <option key={city} value={city} />
+                ))}
+              </datalist>
+            </label>
+          </div>
 
           <label>
             <span>
-              Zona o referencia <RequiredMark />
+              Direccion <RequiredMark />
             </span>
             <input
-              list={locationOptionsId}
-              placeholder="Escribe código postal, ciudad o estado"
-              value={targetForm.locationLabel}
-              onBlur={(event) =>
-                event.currentTarget.setCustomValidity(
-                  isVenezuelaLocationOption(event.currentTarget.value)
-                    ? ""
-                    : "Selecciona una zona válida de la lista.",
-                )
-              }
-              onChange={(event) => {
-                const nextLocationLabel = event.target.value;
-                event.target.setCustomValidity(
-                  nextLocationLabel === "" ||
-                    isVenezuelaLocationOption(nextLocationLabel)
-                    ? ""
-                    : "Selecciona una zona válida de la lista.",
-                );
+              list={addressOptionsId}
+              placeholder="Calle, avenida, numero o sector"
+              value={targetForm.address}
+              onChange={(event) =>
                 setTargetForm({
                   ...targetForm,
-                  locationLabel: nextLocationLabel,
-                });
-              }}
-              required
+                  locationSource: "ADDRESS",
+                  address: event.target.value,
+                  latitude: null,
+                  longitude: null,
+                })
+              }
             />
-            <datalist id={locationOptionsId}>
-              {venezuelaLocationOptions.map((locationOption) => (
-                <option key={locationOption} value={locationOption} />
+            <datalist id={addressOptionsId}>
+              {addressSuggestions.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
               ))}
             </datalist>
           </label>
 
+          <label>
+            <span>Punto de referencia</span>
+            <textarea
+              maxLength={150}
+              placeholder="Ej. Frente a la panaderia, edificio azul, cerca de la plaza"
+              value={targetForm.referencePoint}
+              onChange={(event) =>
+                setTargetForm({
+                  ...targetForm,
+                  referencePoint: event.target.value,
+                })
+              }
+            />
+            <span className="character-count">
+              {targetForm.referencePoint.length}/150
+            </span>
+          </label>
+
           <div className="coordinates-row">
-            <div className="grid-two coordinates-fields">
-              <label>
-                <span>
-                  Latitud <RequiredMark />
-                </span>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={targetForm.latitude}
-                  onChange={(event) =>
-                    setTargetForm({
-                      ...targetForm,
-                      latitude: Number(event.target.value),
-                    })
-                  }
-                  required
-                />
-              </label>
-              <label>
-                <span>
-                  Longitud <RequiredMark />
-                </span>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={targetForm.longitude}
-                  onChange={(event) =>
-                    setTargetForm({
-                      ...targetForm,
-                      longitude: Number(event.target.value),
-                    })
-                  }
-                  required
-                />
-              </label>
-            </div>
+            <p className="locked-field">
+              {targetForm.latitude !== null && targetForm.longitude !== null
+                ? `Coordenadas: ${targetForm.latitude}, ${targetForm.longitude}`
+                : "Las coordenadas se calcularan automaticamente con OpenStreetMap al guardar la direccion."}
+            </p>
             <button
               className="secondary-button location-button"
               onClick={() => useCurrentLocation(targetForm, setTargetForm)}
               type="button"
             >
               <MapPin size={16} />
-              Utilizar mi ubicación actual
+              Utilizar mi ubicacion actual
             </button>
           </div>
         </fieldset>

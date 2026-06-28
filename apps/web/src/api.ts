@@ -30,6 +30,11 @@ export type HelpPost = {
   kind: 'NEED' | 'OFFER';
   name: string;
   contact: string;
+  locationSource: 'ADDRESS' | 'CURRENT_LOCATION';
+  state: string | null;
+  city: string | null;
+  address: string | null;
+  referencePoint: string | null;
   locationLabel: string;
   latitude: number;
   longitude: number;
@@ -40,6 +45,11 @@ export type HelpPost = {
   status: HelpPostStatus;
   helpTypeSlugs: string[];
   helpTypes: Array<{ helpType: { slug: string; name: string } }>;
+};
+
+export type AddressSuggestion = {
+  description: string;
+  placeId: string;
 };
 
 export type PublicMapPost = {
@@ -74,6 +84,26 @@ export async function getMapHelpPosts() {
   }
 
   return response.json() as Promise<PublicMapPost[]>;
+}
+
+export async function getAddressSuggestions(input: { query: string; state?: string; city?: string }) {
+  const params = new URLSearchParams({ query: input.query });
+
+  if (input.state) {
+    params.set('state', input.state);
+  }
+
+  if (input.city) {
+    params.set('city', input.city);
+  }
+
+  const response = await fetch(`${apiUrl}/locations/address-suggestions?${params.toString()}`);
+
+  if (!response.ok) {
+    throw await createApiError(response, 'No se pudieron cargar sugerencias de direccion');
+  }
+
+  return response.json() as Promise<AddressSuggestion[]>;
 }
 
 export async function createHelpPost(input: CreateHelpPostInput) {

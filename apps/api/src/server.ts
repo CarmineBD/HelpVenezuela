@@ -1,14 +1,17 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import {
+  type CreateHelpPostInput,
   createHelpPostSchema,
   helpPostQuerySchema,
   helpTypes,
   peoplePostsSchema,
+  type UpdateHelpPostInput,
   updateHelpPostSchema,
   updateHelpPostStatusSchema
 } from '@help-venezuela/shared';
-import Fastify from 'fastify';
+import Fastify, { type FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { getDistanceKm } from './distance.js';
 import { env } from './env.js';
 import { prisma } from './prisma.js';
@@ -16,7 +19,37 @@ import { prisma } from './prisma.js';
 const app = Fastify({ logger: true });
 let isShuttingDown = false;
 
-await app.register(cors, { origin: env.corsOrigin });
+function isPrivateNetworkHost(hostname: string) {
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
+    return true;
+  }
+
+  if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) {
+    return true;
+  }
+
+  const [firstPart, secondPart] = hostname.split('.').map(Number);
+  return firstPart === 172 && secondPart >= 16 && secondPart <= 31;
+}
+
+function isAllowedCorsOrigin(origin: string | undefined) {
+  if (!origin || origin === env.corsOrigin) {
+    return true;
+  }
+
+  try {
+    const url = new URL(origin);
+    return url.port === '5173' && isPrivateNetworkHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+await app.register(cors, {
+  origin: (origin, callback) => {
+    callback(null, isAllowedCorsOrigin(origin));
+  }
+});
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 
 app.addHook('onClose', async () => {
@@ -54,6 +87,124 @@ function createPublicCoordinates(latitude: number, longitude: number) {
     publicLatitude: Math.round(latitude * 100) / 100,
     publicLongitude: Math.round(longitude * 100) / 100
   };
+}
+
+class LocationResolutionError extends Error {
+  statusCode: number;
+  errorCode: string;
+
+  constructor(errorCode: string, statusCode: number) {
+    super(errorCode);
+    this.name = 'LocationResolutionError';
+    this.errorCode = errorCode;
+    this.statusCode = statusCode;
+  }
+}
+
+type LocationInput = CreateHelpPostInput | UpdateHelpPostInput;
+
+type ResolvedLocation = {
+  locationSource: 'ADDRESS' | 'CURRENT_LOCATION';
+  state: string | null;
+  city: string | null;
+  address: string | null;
+  referencePoint: string | null;
+  locationLabel: string;
+  latitude: number;
+  longitude: number;
+};
+
+type NominatimPlace = {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+};
+
+const openStreetMapHeaders = {
+  'User-Agent': 'HelpVenezuela/0.1 (OpenStreetMap geocoding)'
+};
+
+function toNullableTrimmedValue(value: string | undefined) {
+  const trimmedValue = value?.trim() ?? '';
+  return trimmedValue ? trimmedValue : null;
+}
+
+function createAddressLocationLabel(input: { address: string; city: string; state: string; referencePoint?: string }) {
+  const baseLabel = [input.address, input.city, input.state].map((item) => item.trim()).filter(Boolean).join(', ');
+  const referencePoint = input.referencePoint?.trim();
+
+  return referencePoint ? `${baseLabel}. Ref: ${referencePoint}` : baseLabel;
+}
+
+async function geocodeVenezuelaAddress(input: { address: string; city: string; state: string }) {
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    limit: '1',
+    countrycodes: 've',
+    addressdetails: '1',
+    q: [input.address, input.city, input.state, 'Venezuela'].join(', ')
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: openStreetMapHeaders
+  });
+
+  if (!response.ok) {
+    throw new LocationResolutionError('GEOCODING_REQUEST_FAILED', 502);
+  }
+
+  const [place] = (await response.json()) as NominatimPlace[];
+  const latitude = place ? Number(place.lat) : Number.NaN;
+  const longitude = place ? Number(place.lon) : Number.NaN;
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new LocationResolutionError('LOCATION_NOT_FOUND', 400);
+  }
+
+  return {
+    latitude,
+    longitude
+  };
+}
+
+async function resolveLocation(input: LocationInput): Promise<ResolvedLocation> {
+  if (input.locationSource === 'CURRENT_LOCATION') {
+    return {
+      locationSource: input.locationSource,
+      state: toNullableTrimmedValue(input.state),
+      city: toNullableTrimmedValue(input.city),
+      address: toNullableTrimmedValue(input.address),
+      referencePoint: toNullableTrimmedValue(input.referencePoint),
+      locationLabel: 'Ubicación actual indicada',
+      latitude: input.latitude,
+      longitude: input.longitude
+    };
+  }
+
+  const coordinates = await geocodeVenezuelaAddress({
+    address: input.address,
+    city: input.city,
+    state: input.state
+  });
+
+  return {
+    locationSource: input.locationSource,
+    state: input.state,
+    city: input.city,
+    address: input.address,
+    referencePoint: toNullableTrimmedValue(input.referencePoint),
+    locationLabel: createAddressLocationLabel(input),
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude
+  };
+}
+
+function sendLocationResolutionError(error: unknown, reply: FastifyReply) {
+  if (error instanceof LocationResolutionError) {
+    return reply.code(error.statusCode).send({ error: error.errorCode });
+  }
+
+  throw error;
 }
 
 function doTimeRangesOverlap(
@@ -102,6 +253,11 @@ function toOwnerHelpPost(helpPost: {
   kind: 'NEED' | 'OFFER';
   name: string;
   contact: string;
+  locationSource: 'ADDRESS' | 'CURRENT_LOCATION';
+  state: string | null;
+  city: string | null;
+  address: string | null;
+  referencePoint: string | null;
   locationLabel: string;
   latitude: number;
   longitude: number;
@@ -119,6 +275,11 @@ function toOwnerHelpPost(helpPost: {
     kind: helpPost.kind,
     name: helpPost.name,
     contact: helpPost.contact,
+    locationSource: helpPost.locationSource,
+    state: helpPost.state,
+    city: helpPost.city,
+    address: helpPost.address,
+    referencePoint: helpPost.referencePoint,
     locationLabel: helpPost.locationLabel,
     latitude: helpPost.latitude,
     longitude: helpPost.longitude,
@@ -134,6 +295,63 @@ function toOwnerHelpPost(helpPost: {
   };
 }
 
+const addressSuggestionQuerySchema = z.object({
+  query: z.string().trim().min(2).max(120),
+  state: z.string().trim().max(80).optional(),
+  city: z.string().trim().max(80).optional()
+}).strict();
+
+const geocodeQuerySchema = z.object({
+  address: z.string().trim().min(3).max(180),
+  city: z.string().trim().min(2).max(80),
+  state: z.string().trim().min(2).max(80)
+}).strict();
+
+app.get('/locations/address-suggestions', async (request, reply) => {
+  const parsed = addressSuggestionQuerySchema.safeParse(request.query);
+
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'INVALID_QUERY', details: parsed.error.flatten() });
+  }
+
+  const queryParts = [parsed.data.query, parsed.data.city, parsed.data.state, 'Venezuela'].filter(Boolean);
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    limit: '5',
+    countrycodes: 've',
+    addressdetails: '1',
+    q: queryParts.join(', ')
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: openStreetMapHeaders
+  });
+
+  if (!response.ok) {
+    return reply.code(502).send({ error: 'AUTOCOMPLETE_REQUEST_FAILED' });
+  }
+
+  const places = (await response.json()) as NominatimPlace[];
+
+  return places.map((place) => ({
+    description: place.display_name,
+    placeId: String(place.place_id)
+  }));
+});
+
+app.get('/locations/geocode', async (request, reply) => {
+  const parsed = geocodeQuerySchema.safeParse(request.query);
+
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'INVALID_QUERY', details: parsed.error.flatten() });
+  }
+
+  try {
+    return await geocodeVenezuelaAddress(parsed.data);
+  } catch (error) {
+    return sendLocationResolutionError(error, reply);
+  }
+});
+
 app.post('/help-posts', async (request, reply) => {
   const parsed = createHelpPostSchema.safeParse(request.body);
 
@@ -143,7 +361,15 @@ app.post('/help-posts', async (request, reply) => {
 
   const input = parsed.data;
   const identityCard = normalizeIdentityCard(input.identityCard);
-  const publicCoordinates = createPublicCoordinates(input.latitude, input.longitude);
+  let resolvedLocation: ResolvedLocation;
+
+  try {
+    resolvedLocation = await resolveLocation(input);
+  } catch (error) {
+    return sendLocationResolutionError(error, reply);
+  }
+
+  const publicCoordinates = createPublicCoordinates(resolvedLocation.latitude, resolvedLocation.longitude);
   const existingTypes = await prisma.helpType.findMany({
     where: { slug: { in: input.helpTypeSlugs } }
   });
@@ -164,9 +390,14 @@ app.post('/help-posts', async (request, reply) => {
       kind: input.kind,
       name: input.name,
       contact: input.contact,
-      locationLabel: input.locationLabel,
-      latitude: input.latitude,
-      longitude: input.longitude,
+      locationSource: resolvedLocation.locationSource,
+      state: resolvedLocation.state,
+      city: resolvedLocation.city,
+      address: resolvedLocation.address,
+      referencePoint: resolvedLocation.referencePoint,
+      locationLabel: resolvedLocation.locationLabel,
+      latitude: resolvedLocation.latitude,
+      longitude: resolvedLocation.longitude,
       publicLatitude: publicCoordinates.publicLatitude,
       publicLongitude: publicCoordinates.publicLongitude,
       timeFrom: input.timeFrom,
@@ -351,15 +582,28 @@ app.patch('/help-posts/:id', async (request, reply) => {
     return reply.code(400).send({ error: 'INVALID_HELP_TYPES' });
   }
 
-  const publicCoordinates = createPublicCoordinates(input.latitude, input.longitude);
+  let resolvedLocation: ResolvedLocation;
+
+  try {
+    resolvedLocation = await resolveLocation(input);
+  } catch (error) {
+    return sendLocationResolutionError(error, reply);
+  }
+
+  const publicCoordinates = createPublicCoordinates(resolvedLocation.latitude, resolvedLocation.longitude);
   const updatedHelpPost = await prisma.helpPost.update({
     where: { id },
     data: {
       name: input.name,
       contact: input.contact,
-      locationLabel: input.locationLabel,
-      latitude: input.latitude,
-      longitude: input.longitude,
+      locationSource: resolvedLocation.locationSource,
+      state: resolvedLocation.state,
+      city: resolvedLocation.city,
+      address: resolvedLocation.address,
+      referencePoint: resolvedLocation.referencePoint,
+      locationLabel: resolvedLocation.locationLabel,
+      latitude: resolvedLocation.latitude,
+      longitude: resolvedLocation.longitude,
       publicLatitude: publicCoordinates.publicLatitude,
       publicLongitude: publicCoordinates.publicLongitude,
       timeFrom: input.timeFrom,

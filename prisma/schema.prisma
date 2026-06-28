@@ -26,6 +26,11 @@ enum Urgency {
   HIGH
 }
 
+enum LocationSource {
+  ADDRESS
+  CURRENT_LOCATION
+}
+
 model Person {
   id           String     @id @default(cuid())
   identityCard String     @unique
@@ -43,6 +48,11 @@ model HelpPost {
   kind          HelpPostKind
   name          String
   contact       String
+  locationSource LocationSource @default(ADDRESS)
+  state         String?
+  city          String?
+  address       String?
+  referencePoint String?
   locationLabel String
   latitude      Float
   longitude     Float
