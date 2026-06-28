@@ -1001,20 +1001,39 @@ export function App() {
               : "¿Cuándo puedes ayudar?"}
           </legend>
 
-          <label className="switch-row">
-            <input
-              checked={isAnyTime}
-              onChange={(event) =>
-                setTargetForm({
-                  ...targetForm,
-                  timeFrom: event.target.checked ? null : "08:00",
-                  timeTo: event.target.checked ? null : "18:00",
-                })
-              }
-              type="checkbox"
-            />
-            Cualquier momento
-          </label>
+          <div className="time-mode-options">
+            <label className="orb-option">
+              <input
+                checked={isAnyTime}
+                name={`time-mode-${options.isEditing ? "edit" : "create"}`}
+                onChange={() =>
+                  setTargetForm({
+                    ...targetForm,
+                    timeFrom: null,
+                    timeTo: null,
+                  })
+                }
+                type="radio"
+              />
+              Cualquier momento
+            </label>
+
+            <label className="orb-option">
+              <input
+                checked={!isAnyTime}
+                name={`time-mode-${options.isEditing ? "edit" : "create"}`}
+                onChange={() =>
+                  setTargetForm({
+                    ...targetForm,
+                    timeFrom: targetForm.timeFrom ?? "08:00",
+                    timeTo: targetForm.timeTo ?? "18:00",
+                  })
+                }
+                type="radio"
+              />
+              Franja horaria
+            </label>
+          </div>
 
           {!isAnyTime && (
             <div className="grid-two">

@@ -284,15 +284,23 @@ textarea {
   white-space: nowrap;
 }
 
-.switch-row {
+.switch-row,
+.orb-option {
   align-items: center;
   display: flex;
   gap: 10px;
 }
 
-.switch-row input {
+.switch-row input,
+.orb-option input {
   height: 18px;
   width: 18px;
+}
+
+.time-mode-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .character-count {
