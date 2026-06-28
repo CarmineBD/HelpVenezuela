@@ -8,6 +8,21 @@ import {
   venezuelaCitiesByState,
   venezuelaStates,
 } from "@help-venezuela/shared";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import L from "leaflet";
 import {
   ArrowLeft,
@@ -238,30 +253,35 @@ function IdentityCardInput({
   const identityCard = getIdentityCardParts(value);
 
   return (
-    <label>
+    <Label>
       <span>
         {label} <RequiredMark />
       </span>
       <div className="compound-input identity-input">
-        <select
+        <Select
           aria-label="Tipo de cédula"
           value={identityCard.prefix}
-          onChange={(event) =>
+          onValueChange={(nextPrefix) =>
             onChange(
               formatIdentityCard(
-                event.target.value as IdentityCardPrefix,
+                nextPrefix as IdentityCardPrefix,
                 identityCard.number,
               ),
             )
           }
         >
-          {identityCardPrefixes.map((prefix) => (
-            <option key={prefix} value={prefix}>
-              {prefix}
-            </option>
-          ))}
-        </select>
-        <input
+          <SelectTrigger aria-label="Tipo de cédula">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {identityCardPrefixes.map((prefix) => (
+              <SelectItem key={prefix} value={prefix}>
+                {prefix}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
           inputMode="numeric"
           pattern="\d{5,12}"
           placeholder="12345678"
@@ -273,7 +293,7 @@ function IdentityCardInput({
           title="Introduce solo números, entre 5 y 12 dígitos."
         />
       </div>
-    </label>
+    </Label>
   );
 }
 
@@ -287,25 +307,30 @@ function ContactInput({
   const contact = getContactParts(value);
 
   return (
-    <label>
+    <Label>
       <span>
         Contacto o WhatsApp <RequiredMark />
       </span>
       <div className="compound-input contact-input">
-        <select
+        <Select
           aria-label="Prefijo telefónico"
           value={contact.code}
-          onChange={(event) =>
-            onChange(formatContact(event.target.value, contact.number))
+          onValueChange={(nextCode) =>
+            onChange(formatContact(nextCode, contact.number))
           }
         >
-          {countryDialCodes.map(({ country, code }) => (
-            <option key={`${country}-${code}`} value={code}>
-              {country} ({code})
-            </option>
-          ))}
-        </select>
-        <input
+          <SelectTrigger aria-label="Prefijo telefónico">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {countryDialCodes.map(({ country, code }) => (
+              <SelectItem key={`${country}-${code}`} value={code}>
+                {country} ({code})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
           inputMode="numeric"
           pattern="\d{4,15}"
           placeholder="4121234567"
@@ -318,7 +343,21 @@ function ContactInput({
           title="Introduce solo números para el teléfono."
         />
       </div>
-    </label>
+    </Label>
+  );
+}
+
+function FeedbackMessage({
+  children,
+  variant = "default",
+}: {
+  children: string;
+  variant?: "default" | "destructive";
+}) {
+  return (
+    <Alert className={variant === "destructive" ? "notice error" : "notice"} variant={variant}>
+      <AlertDescription>{children}</AlertDescription>
+    </Alert>
   );
 }
 
@@ -841,11 +880,11 @@ export function App() {
           )}
 
           <div className="grid-two">
-            <label>
+            <Label>
               <span>
                 Nombre <RequiredMark />
               </span>
-              <input
+              <Input
                 pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ ]{2,80}"
                 title="Usa solo letras, espacios, tildes en vocales y la ñ."
                 value={targetForm.name}
@@ -854,13 +893,13 @@ export function App() {
                 }
                 required
               />
-            </label>
+            </Label>
 
-            <label>
+            <Label>
               <span>
                 Apellidos <RequiredMark />
               </span>
-              <input
+              <Input
                 pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ ]{2,80}"
                 title="Usa solo letras, espacios, tildes en vocales y la ñ."
                 value={targetForm.surnames}
@@ -869,7 +908,7 @@ export function App() {
                 }
                 required
               />
-            </label>
+            </Label>
           </div>
 
           <ContactInput
@@ -882,11 +921,11 @@ export function App() {
           <legend>Ubicacion</legend>
 
           <div className="grid-two">
-            <label>
+            <Label>
               <span>
                 Estado <RequiredMark />
               </span>
-              <input
+              <Input
                 list={stateOptionsId}
                 placeholder="Ej. Miranda"
                 value={targetForm.state}
@@ -906,13 +945,13 @@ export function App() {
                   <option key={state} value={state} />
                 ))}
               </datalist>
-            </label>
+            </Label>
 
-            <label>
+            <Label>
               <span>
                 Ciudad <RequiredMark />
               </span>
-              <input
+              <Input
                 list={cityOptionsId}
                 placeholder="Ej. Caracas"
                 value={targetForm.city}
@@ -931,14 +970,14 @@ export function App() {
                   <option key={city} value={city} />
                 ))}
               </datalist>
-            </label>
+            </Label>
           </div>
 
-          <label>
+          <Label>
             <span>
               Direccion <RequiredMark />
             </span>
-            <input
+            <Input
               list={addressOptionsId}
               placeholder="Calle, avenida, numero o sector"
               value={targetForm.address}
@@ -957,11 +996,11 @@ export function App() {
                 <option key={suggestion} value={suggestion} />
               ))}
             </datalist>
-          </label>
+          </Label>
 
-          <label>
+          <Label>
             <span>Punto de referencia</span>
-            <textarea
+            <Textarea
               maxLength={150}
               placeholder="Ej. Frente a la panaderia, edificio azul, cerca de la plaza"
               value={targetForm.referencePoint}
@@ -975,7 +1014,7 @@ export function App() {
             <span className="character-count">
               {targetForm.referencePoint.length}/150
             </span>
-          </label>
+          </Label>
 
           <div className="coordinates-row">
             <p className="locked-field">
@@ -983,14 +1022,15 @@ export function App() {
                 ? `Coordenadas: ${targetForm.latitude}, ${targetForm.longitude}`
                 : "Las coordenadas se calcularan automaticamente con OpenStreetMap al guardar la direccion."}
             </p>
-            <button
+            <Button
               className="secondary-button location-button"
               onClick={() => useCurrentLocation(targetForm, setTargetForm)}
               type="button"
+              variant="outline"
             >
               <MapPin size={16} />
               Utilizar mi ubicacion actual
-            </button>
+            </Button>
           </div>
         </fieldset>
 
@@ -1001,47 +1041,44 @@ export function App() {
               : "¿Cuándo puedes ayudar?"}
           </legend>
 
-          <div className="time-mode-options">
-            <label className="orb-option">
-              <input
-                checked={isAnyTime}
-                name={`time-mode-${options.isEditing ? "edit" : "create"}`}
-                onChange={() =>
-                  setTargetForm({
-                    ...targetForm,
-                    timeFrom: null,
-                    timeTo: null,
-                  })
-                }
-                type="radio"
-              />
-              Cualquier momento
-            </label>
+          <RadioGroup
+            className="time-mode-options"
+            value={isAnyTime ? "any" : "range"}
+            onValueChange={(nextValue) => {
+              if (nextValue === "any") {
+                setTargetForm({
+                  ...targetForm,
+                  timeFrom: null,
+                  timeTo: null,
+                });
+                return;
+              }
 
-            <label className="orb-option">
-              <input
-                checked={!isAnyTime}
-                name={`time-mode-${options.isEditing ? "edit" : "create"}`}
-                onChange={() =>
-                  setTargetForm({
-                    ...targetForm,
-                    timeFrom: targetForm.timeFrom ?? "08:00",
-                    timeTo: targetForm.timeTo ?? "18:00",
-                  })
-                }
-                type="radio"
-              />
+              setTargetForm({
+                ...targetForm,
+                timeFrom: targetForm.timeFrom ?? "08:00",
+                timeTo: targetForm.timeTo ?? "18:00",
+              });
+            }}
+          >
+            <Label className="orb-option">
+              <RadioGroupItem value="any" />
+              Cualquier momento
+            </Label>
+
+            <Label className="orb-option">
+              <RadioGroupItem value="range" />
               Franja horaria
-            </label>
-          </div>
+            </Label>
+          </RadioGroup>
 
           {!isAnyTime && (
             <div className="grid-two">
-              <label>
+              <Label>
                 <span>
                   Inicio <RequiredMark />
                 </span>
-                <input
+                <Input
                   type="time"
                   value={targetForm.timeFrom ?? ""}
                   onChange={(event) =>
@@ -1052,12 +1089,12 @@ export function App() {
                   }
                   required
                 />
-              </label>
-              <label>
+              </Label>
+              <Label>
                 <span>
                   Fin <RequiredMark />
                 </span>
-                <input
+                <Input
                   type="time"
                   value={targetForm.timeTo ?? ""}
                   onChange={(event) =>
@@ -1065,7 +1102,7 @@ export function App() {
                   }
                   required
                 />
-              </label>
+              </Label>
             </div>
           )}
         </fieldset>
@@ -1074,24 +1111,29 @@ export function App() {
           <legend>Detalles de la ayuda</legend>
 
           {isNeedForm && (
-            <label>
+            <Label>
               <span>
                 Urgencia <RequiredMark />
               </span>
-              <select
+              <Select
                 value={targetForm.urgency}
-                onChange={(event) =>
+                onValueChange={(nextUrgency) =>
                   setTargetForm({
                     ...targetForm,
-                    urgency: event.target.value as typeof targetForm.urgency,
+                    urgency: nextUrgency as typeof targetForm.urgency,
                   })
                 }
               >
-                <option value="LOW">Baja</option>
-                <option value="MEDIUM">Media</option>
-                <option value="HIGH">Alta</option>
-              </select>
-            </label>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LOW">Baja</SelectItem>
+                  <SelectItem value="MEDIUM">Media</SelectItem>
+                  <SelectItem value="HIGH">Alta</SelectItem>
+                </SelectContent>
+              </Select>
+            </Label>
           )}
 
           <fieldset>
@@ -1103,7 +1145,7 @@ export function App() {
             </legend>
             <div className="chips">
               {helpTypes.map((type) => (
-                <button
+                <Button
                   className={
                     targetForm.helpTypeSlugs.includes(type.slug)
                       ? "chip selected"
@@ -1114,18 +1156,23 @@ export function App() {
                     toggleHelpType(type.slug, targetForm, setTargetForm)
                   }
                   type="button"
+                  variant={
+                    targetForm.helpTypeSlugs.includes(type.slug)
+                      ? "default"
+                      : "outline"
+                  }
                 >
                   {type.name}
-                </button>
+                </Button>
               ))}
             </div>
           </fieldset>
 
-          <label>
+          <Label>
             <span>
               Descripción <RequiredMark />
             </span>
-            <textarea
+            <Textarea
               maxLength={descriptionMaxLength}
               value={targetForm.description}
               onChange={(event) =>
@@ -1139,17 +1186,17 @@ export function App() {
             <span className="character-count">
               {targetForm.description.length}/{descriptionMaxLength}
             </span>
-          </label>
+          </Label>
         </fieldset>
 
-        <button className="primary-button" type="submit">
+        <Button className="primary-button" type="submit">
           <Send size={18} />
           {options.isEditing
             ? "Guardar cambios"
             : isNeedForm
               ? "Solicitar ayuda"
               : "Ofrecer ayuda"}
-        </button>
+        </Button>
       </form>
     );
   }
@@ -1158,14 +1205,15 @@ export function App() {
     return (
       <main className="map-shell">
         <header className="map-header">
-          <button
+          <Button
             className="back-button"
             onClick={() => navigate("/")}
             type="button"
+            variant="ghost"
           >
             <ArrowLeft size={18} />
             Volver
-          </button>
+          </Button>
           <div>
             <p className="eyebrow">Vista publica</p>
             <h1>Mapa de ayuda</h1>
@@ -1183,20 +1231,22 @@ export function App() {
               <p>No hay publicaciones activas todavia.</p>
             )}
             {mapPosts.map((post) => (
-              <article className="map-post-card" key={post.id}>
-                <div className="post-head">
-                  <strong>
-                    {post.kind === "NEED" ? "Necesita ayuda" : "Ofrece ayuda"}
-                  </strong>
-                  <span>{post.urgency ?? "Oferta"}</span>
-                </div>
-                <p>{post.locationLabel}</p>
-                <small>{getTimeLabel(post)}</small>
-                <p>{post.descriptionPreview}</p>
-                <small>
-                  Punto publico: {post.publicLatitude}, {post.publicLongitude}
-                </small>
-              </article>
+              <Card className="map-post-card" key={post.id}>
+                <CardContent>
+                  <div className="post-head">
+                    <strong>
+                      {post.kind === "NEED" ? "Necesita ayuda" : "Ofrece ayuda"}
+                    </strong>
+                    <Badge variant="secondary">{post.urgency ?? "Oferta"}</Badge>
+                  </div>
+                  <p>{post.locationLabel}</p>
+                  <small>{getTimeLabel(post)}</small>
+                  <p>{post.descriptionPreview}</p>
+                  <small>
+                    Punto publico: {post.publicLatitude}, {post.publicLongitude}
+                  </small>
+                </CardContent>
+              </Card>
             ))}
           </aside>
           <div className="map-status">
@@ -1215,14 +1265,15 @@ export function App() {
     return (
       <main className="app-shell">
         <section className="owner-page">
-          <button
+          <Button
             className="back-button"
             onClick={() => navigate("/")}
             type="button"
+            variant="ghost"
           >
             <ArrowLeft size={18} />
             Volver
-          </button>
+          </Button>
 
           <form
             className="panel form"
@@ -1240,9 +1291,9 @@ export function App() {
               value={ownerIdentityCard}
               onChange={setOwnerIdentityCard}
             />
-            <button className="primary-button" type="submit">
+            <Button className="primary-button" type="submit">
               Buscar publicaciones
-            </button>
+            </Button>
           </form>
 
           {editingForm && (
@@ -1258,18 +1309,19 @@ export function App() {
 
           <section className="post-list">
             {ownerPosts.map((post) => (
-              <article className="panel post-card" key={post.id}>
-                <div className="post-head">
-                  <strong>
-                    {post.kind === "NEED" ? "Solicitud" : "Oferta"}
-                  </strong>
-                  <span>{getStatusLabel(post.status)}</span>
-                </div>
-                <h3>{post.locationLabel}</h3>
-                <p>{post.description}</p>
-                <small>{getTimeLabel(post)}</small>
-                <div className="actions-row">
-                  <button
+              <Card className="panel post-card" key={post.id}>
+                <CardContent>
+                  <div className="post-head">
+                    <strong>
+                      {post.kind === "NEED" ? "Solicitud" : "Oferta"}
+                    </strong>
+                    <Badge variant="secondary">{getStatusLabel(post.status)}</Badge>
+                  </div>
+                  <h3>{post.locationLabel}</h3>
+                  <p>{post.description}</p>
+                  <small>{getTimeLabel(post)}</small>
+                  <div className="actions-row">
+                  <Button
                     className="secondary-button"
                     onClick={() => {
                       setEditingPostId(post.id);
@@ -1278,41 +1330,48 @@ export function App() {
                       );
                     }}
                     type="button"
+                    variant="outline"
                   >
                     <Pencil size={16} />
                     Editar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     className="secondary-button"
                     onClick={() => void changeStatus(post.id, "ACTIVE")}
                     type="button"
+                    variant="outline"
                   >
                     <Eye size={16} />
                     Mostrar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     className="secondary-button"
                     onClick={() => void changeStatus(post.id, "HIDDEN")}
                     type="button"
+                    variant="outline"
                   >
                     <EyeOff size={16} />
                     Ocultar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     className="danger-button"
                     onClick={() => void changeStatus(post.id, "DELETED")}
                     type="button"
+                    variant="destructive"
                   >
                     <Trash2 size={16} />
                     Eliminar
-                  </button>
-                </div>
-              </article>
+                  </Button>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </section>
 
-          {message && <p className="notice">{message}</p>}
-          {error && <p className="notice error">{error}</p>}
+          {message && <FeedbackMessage>{message}</FeedbackMessage>}
+          {error && (
+            <FeedbackMessage variant="destructive">{error}</FeedbackMessage>
+          )}
         </section>
       </main>
     );
@@ -1325,46 +1384,50 @@ export function App() {
           <h1>Help Venezuela</h1>
           <p>¿Que necesitas?</p>
           <div className="choice-grid">
-            <button
+            <Button
               className="choice-card"
               onClick={() => navigate("/formulario/ayudar")}
               type="button"
+              variant="outline"
             >
               <HandHeart size={32} />
               <span>Ayudar</span>
-            </button>
-            <button
+            </Button>
+            <Button
               className="choice-card"
               onClick={() => navigate("/formulario/ser-ayudado")}
               type="button"
+              variant="outline"
             >
               <LifeBuoy size={32} />
               <span>Solicitar ayuda</span>
-            </button>
+            </Button>
           </div>
           <div className="home-links">
-            <a
-              className="home-map-link"
-              href="/mapa"
-              onClick={(event) => {
-                event.preventDefault();
-                navigate("/mapa");
-              }}
-            >
-              <MapPin size={18} />
-              Ver mapa
-            </a>
-            <a
-              className="home-map-link"
-              href="/mis-publicaciones"
-              onClick={(event) => {
-                event.preventDefault();
-                navigate("/mis-publicaciones");
-              }}
-            >
-              <Pencil size={18} />
-              Mis publicaciones
-            </a>
+            <Button asChild className="home-map-link" variant="link">
+              <a
+                href="/mapa"
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate("/mapa");
+                }}
+              >
+                <MapPin size={18} />
+                Ver mapa
+              </a>
+            </Button>
+            <Button asChild className="home-map-link" variant="link">
+              <a
+                href="/mis-publicaciones"
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate("/mis-publicaciones");
+                }}
+              >
+                <Pencil size={18} />
+                Mis publicaciones
+              </a>
+            </Button>
           </div>
         </section>
       </main>
@@ -1374,21 +1437,24 @@ export function App() {
   return (
     <main className="app-shell">
       <section className="form-page">
-        <button
+        <Button
           className="back-button"
           onClick={() => navigate("/")}
           type="button"
+          variant="ghost"
         >
           <ArrowLeft size={18} />
           Volver
-        </button>
+        </Button>
 
         {renderPostForm(form, setForm, (event) => void handleSubmit(event), {
           isEditing: false,
         })}
 
-        {message && <p className="notice">{message}</p>}
-        {error && <p className="notice error">{error}</p>}
+        {message && <FeedbackMessage>{message}</FeedbackMessage>}
+        {error && (
+          <FeedbackMessage variant="destructive">{error}</FeedbackMessage>
+        )}
       </section>
     </main>
   );
