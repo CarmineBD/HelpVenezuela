@@ -1061,12 +1061,12 @@ export function App() {
               });
             }}
           >
-            <Label className="orb-option">
+            <Label className="radio-option">
               <RadioGroupItem value="any" />
               Cualquier momento
             </Label>
 
-            <Label className="orb-option">
+            <Label className="radio-option">
               <RadioGroupItem value="range" />
               Franja horaria
             </Label>

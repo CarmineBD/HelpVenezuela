@@ -55,12 +55,13 @@
   --space-8: 2rem;
   --space-10: 2.5rem;
   --space-12: 3rem;
-  --page-inline: clamp(1rem, 3vw, 2rem);
-  --page-block: clamp(1rem, 3vw, 2rem);
+  --page-inline: clamp(1rem, 4vw, 2rem);
+  --page-block: clamp(1rem, 4vw, 2rem);
   --surface-padding: clamp(1.25rem, 2.5vw, 1.5rem);
   --section-gap: 1.5rem;
   --field-gap: 0.5rem;
   --control-gap: 0.75rem;
+  --touch-target: 2.75rem;
   --content-max-sm: 44rem;
   --content-max-md: 54rem;
   --content-max-lg: 75rem;
@@ -145,10 +146,17 @@
 html {
   font-size: 16px;
   text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 button,
@@ -156,10 +164,16 @@ input,
 select,
 textarea {
   font: inherit;
+  min-width: 0;
+}
+
+img,
+svg {
+  max-width: 100%;
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: var(--page-block) var(--page-inline);
 }
 
@@ -167,7 +181,7 @@ textarea {
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: var(--page-block) var(--page-inline);
 }
 
@@ -180,9 +194,10 @@ textarea {
 .home-content h1 {
   font-size: clamp(3rem, 8vw, 5.5rem);
   font-weight: 750;
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
   line-height: 0.95;
   margin-bottom: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
 .home-content p {
@@ -212,6 +227,7 @@ textarea {
   justify-items: center;
   min-height: 10rem;
   padding: var(--space-8);
+  white-space: normal;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -245,7 +261,9 @@ textarea {
   display: inline-flex;
   font-weight: 600;
   gap: var(--space-2);
+  min-height: var(--touch-target);
   text-decoration: none;
+  white-space: normal;
 }
 
 .home-map-link:hover {
@@ -257,6 +275,7 @@ textarea {
   gap: var(--space-4);
   margin: 0 auto;
   max-width: var(--content-max-sm);
+  width: min(100%, var(--content-max-sm));
 }
 
 .owner-page {
@@ -264,6 +283,7 @@ textarea {
   gap: var(--space-4);
   margin: 0 auto;
   max-width: var(--content-max-md);
+  width: min(100%, var(--content-max-md));
 }
 
 .back-button {
@@ -284,7 +304,7 @@ textarea {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-weight: 650;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   line-height: 1.2;
   margin: 0 0 var(--space-1);
   text-transform: uppercase;
@@ -300,15 +320,16 @@ p {
 h1 {
   font-size: clamp(1.875rem, 4vw, 2.75rem);
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   line-height: 1.05;
   margin-bottom: 0;
+  overflow-wrap: anywhere;
 }
 
 h2 {
   font-size: 1.25rem;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.25;
 }
 
@@ -320,6 +341,7 @@ h3 {
 
 p {
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .panel {
@@ -327,7 +349,9 @@ p {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-surface);
+  min-width: 0;
   padding: var(--surface-padding);
+  width: 100%;
 }
 
 .section-title {
@@ -335,6 +359,11 @@ p {
   display: flex;
   gap: var(--space-3);
   margin-bottom: var(--space-2);
+  min-width: 0;
+}
+
+.section-title > div {
+  min-width: 0;
 }
 
 .section-title > svg {
@@ -344,7 +373,7 @@ p {
 
 .section-title h1 {
   font-size: clamp(1.5rem, 3vw, 2rem);
-  letter-spacing: -0.035em;
+  letter-spacing: 0;
 }
 
 .form {
@@ -379,6 +408,12 @@ label {
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.35;
+  min-width: 0;
+}
+
+legend,
+label > span {
+  overflow-wrap: anywhere;
 }
 
 .form-section > legend {
@@ -403,10 +438,20 @@ textarea {
   display: grid;
   gap: var(--control-gap);
   grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.identity-input {
+  grid-template-columns: minmax(4.75rem, 5.5rem) minmax(0, 1fr);
 }
 
 .contact-input {
   grid-template-columns: minmax(12rem, auto) minmax(0, 1fr);
+}
+
+[data-slot="select-trigger"] {
+  min-width: 0;
+  width: 100%;
 }
 
 .grid-two {
@@ -423,14 +468,16 @@ textarea {
 }
 
 .location-button {
+  min-height: var(--touch-target);
   white-space: nowrap;
 }
 
 .switch-row,
-.orb-option {
+.radio-option {
   align-items: center;
   display: flex;
   gap: var(--space-2);
+  min-height: var(--touch-target);
 }
 
 .time-mode-options {
@@ -466,11 +513,22 @@ textarea {
 
 .chip {
   border-radius: 999px;
+  flex: 1 1 10rem;
   min-height: 2rem;
+  text-align: center;
+  white-space: normal;
 }
 
 .primary-button {
+  min-height: var(--touch-target);
   justify-self: stretch;
+  white-space: normal;
+}
+
+.secondary-button,
+.danger-button {
+  min-height: var(--touch-target);
+  white-space: normal;
 }
 
 .notice {
@@ -489,7 +547,9 @@ textarea {
 .map-shell {
   display: grid;
   grid-template-rows: auto 1fr;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 
 .map-header {
@@ -508,6 +568,7 @@ textarea {
 }
 
 .map-fullscreen {
+  height: 100%;
   min-height: 0;
   position: relative;
 }
@@ -516,7 +577,7 @@ textarea {
   background: var(--muted);
   display: block;
   height: 100%;
-  min-height: calc(100vh - 81px);
+  min-height: 0;
   width: 100%;
 }
 
@@ -562,6 +623,11 @@ textarea {
   z-index: 500;
 }
 
+.map-status span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .map-posts-panel {
   background: var(--card);
   border: 1px solid var(--border);
@@ -572,6 +638,7 @@ textarea {
   left: var(--space-5);
   max-height: calc(100% - 2.5rem);
   max-width: 24rem;
+  min-width: 0;
   overflow: auto;
   padding: var(--space-4);
   position: absolute;
@@ -583,14 +650,20 @@ textarea {
 .map-posts-panel h2 {
   font-size: 1rem;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   margin: 0;
 }
 
 .map-post-card {
   box-shadow: none;
   gap: var(--space-3);
+  min-width: 0;
   padding-block: var(--space-4);
+}
+
+.map-post-card [data-slot="card-content"],
+.post-card [data-slot="card-content"] {
+  min-width: 0;
 }
 
 .map-post-card p {
@@ -609,8 +682,10 @@ textarea {
 .post-head {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   justify-content: space-between;
+  min-width: 0;
 }
 
 .post-head strong {
@@ -643,6 +718,10 @@ textarea {
   margin-top: var(--space-4);
 }
 
+.actions-row > [data-slot="button"] {
+  flex: 1 1 9rem;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     padding: var(--space-4);
@@ -652,7 +731,6 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .compound-input,
   .contact-input,
   .coordinates-row {
     grid-template-columns: 1fr;
@@ -680,6 +758,7 @@ textarea {
   .map-status {
     align-items: flex-start;
     border-radius: var(--radius-lg);
+    bottom: var(--space-4);
     font-size: 0.8125rem;
     left: var(--space-4);
     right: var(--space-4);
@@ -688,7 +767,7 @@ textarea {
 
   .map-posts-panel {
     left: var(--space-4);
-    max-height: 45%;
+    max-height: min(36dvh, 18rem);
     right: var(--space-4);
     top: var(--space-4);
     width: auto;
@@ -696,8 +775,18 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  :root {
+    --surface-padding: var(--space-4);
+  }
+
+  .home-shell {
+    align-items: flex-start;
+    padding-top: var(--space-8);
+  }
+
   .home-content h1 {
     font-size: clamp(2.75rem, 16vw, 4rem);
+    line-height: 1;
   }
 
   .choice-card {
@@ -716,6 +805,63 @@ textarea {
   .form-section {
     gap: var(--space-3);
     padding-top: var(--space-5);
+  }
+
+  .time-mode-options {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .actions-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .actions-row > [data-slot="button"],
+  .location-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --page-inline: var(--space-3);
+    --page-block: var(--space-3);
+  }
+
+  .app-shell {
+    padding: var(--page-block) var(--page-inline);
+  }
+
+  .home-links {
+    display: grid;
+    justify-items: center;
+  }
+
+  .choice-card {
+    min-height: 7.75rem;
+    padding: var(--space-5);
+  }
+
+  .panel,
+  .map-posts-panel {
+    border-radius: var(--radius-lg);
+  }
+
+  .map-header {
+    padding: var(--space-3);
+  }
+
+  .map-posts-panel {
+    left: var(--space-3);
+    right: var(--space-3);
+    top: var(--space-3);
+  }
+
+  .map-status {
+    bottom: var(--space-3);
+    left: var(--space-3);
+    right: var(--space-3);
   }
 }
 
