@@ -35,6 +35,7 @@ model Person {
   id           String     @id @default(cuid())
   identityCard String     @unique
   name         String?
+  surnames     String?
   contact      String?
   helpPosts    HelpPost[]
   createdAt    DateTime   @default(now())
@@ -47,6 +48,7 @@ model HelpPost {
   person        Person         @relation(fields: [personId], references: [id], onDelete: Cascade)
   kind          HelpPostKind
   name          String
+  surnames      String?
   contact       String
   locationSource LocationSource @default(ADDRESS)
   state         String?

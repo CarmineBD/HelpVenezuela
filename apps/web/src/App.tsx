@@ -42,6 +42,7 @@ type HelpPostForm = {
   identityCard: string;
   kind: FormKind;
   name: string;
+  surnames: string;
   contact: string;
   locationSource: LocationSource;
   state: string;
@@ -68,7 +69,8 @@ const fieldErrorMessages: Record<string, string> = {
   latitude: "La latitud debe estar entre -90 y 90.",
   locationSource: "Selecciona una fuente de ubicacion valida.",
   longitude: "La longitud debe estar entre -180 y 180.",
-  name: "El nombre y apellidos deben tener entre 2 y 80 caracteres.",
+  name: "El nombre debe tener entre 2 y 80 caracteres y solo usar letras, espacios, tildes y ñ.",
+  surnames: "Los apellidos deben tener entre 2 y 80 caracteres y solo usar letras, espacios, tildes y ñ.",
   referencePoint: "El punto de referencia no puede superar 150 caracteres.",
   state: "Selecciona un estado valido de Venezuela.",
   status: "El estado seleccionado no es valido.",
@@ -325,6 +327,7 @@ function createInitialForm(kind: FormKind): HelpPostForm {
     identityCard: "",
     kind,
     name: "",
+    surnames: "",
     contact: "",
     locationSource: "ADDRESS",
     state: "",
@@ -349,6 +352,7 @@ function createFormFromPost(
     identityCard,
     kind: post.kind,
     name: post.name,
+    surnames: post.surnames ?? "",
     contact: post.contact,
     locationSource: post.locationSource,
     state: post.state ?? "",
@@ -393,6 +397,7 @@ function getStatusLabel(status: HelpPostStatus) {
 function createCommonInput(form: HelpPostForm) {
   return {
     name: form.name,
+    surnames: form.surnames,
     contact: form.contact,
     timeFrom: form.timeFrom,
     timeTo: form.timeTo,
@@ -835,18 +840,37 @@ export function App() {
             </p>
           )}
 
-          <label>
-            <span>
-              Nombre y apellidos <RequiredMark />
-            </span>
-            <input
-              value={targetForm.name}
-              onChange={(event) =>
-                setTargetForm({ ...targetForm, name: event.target.value })
-              }
-              required
-            />
-          </label>
+          <div className="grid-two">
+            <label>
+              <span>
+                Nombre <RequiredMark />
+              </span>
+              <input
+                pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ ]{2,80}"
+                title="Usa solo letras, espacios, tildes en vocales y la ñ."
+                value={targetForm.name}
+                onChange={(event) =>
+                  setTargetForm({ ...targetForm, name: event.target.value })
+                }
+                required
+              />
+            </label>
+
+            <label>
+              <span>
+                Apellidos <RequiredMark />
+              </span>
+              <input
+                pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ ]{2,80}"
+                title="Usa solo letras, espacios, tildes en vocales y la ñ."
+                value={targetForm.surnames}
+                onChange={(event) =>
+                  setTargetForm({ ...targetForm, surnames: event.target.value })
+                }
+                required
+              />
+            </label>
+          </div>
 
           <ContactInput
             value={targetForm.contact}

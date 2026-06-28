@@ -29,6 +29,7 @@ export type HelpPost = {
   id: string;
   kind: 'NEED' | 'OFFER';
   name: string;
+  surnames: string | null;
   contact: string;
   locationSource: 'ADDRESS' | 'CURRENT_LOCATION';
   state: string | null;

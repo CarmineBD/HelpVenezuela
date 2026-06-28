@@ -211,6 +211,7 @@ Campos:
 - `id`
 - `kind`: `NEED` o `OFFER`
 - `name`
+- `surnames`
 - `contact`
 - `locationLabel`
 - `latitude`
@@ -395,4 +396,3 @@ El MVP está listo cuando una persona puede:
 6. Ver matches sugeridos.
 7. Contactar por WhatsApp.
 8. Borrar o cerrar su publicación con un enlace privado.
-

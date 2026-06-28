@@ -252,6 +252,7 @@ function toOwnerHelpPost(helpPost: {
   id: string;
   kind: 'NEED' | 'OFFER';
   name: string;
+  surnames: string | null;
   contact: string;
   locationSource: 'ADDRESS' | 'CURRENT_LOCATION';
   state: string | null;
@@ -274,6 +275,7 @@ function toOwnerHelpPost(helpPost: {
     id: helpPost.id,
     kind: helpPost.kind,
     name: helpPost.name,
+    surnames: helpPost.surnames,
     contact: helpPost.contact,
     locationSource: helpPost.locationSource,
     state: helpPost.state,
@@ -380,8 +382,8 @@ app.post('/help-posts', async (request, reply) => {
 
   const person = await prisma.person.upsert({
     where: { identityCard },
-    update: { name: input.name, contact: input.contact },
-    create: { identityCard, name: input.name, contact: input.contact }
+    update: { name: input.name, surnames: input.surnames, contact: input.contact },
+    create: { identityCard, name: input.name, surnames: input.surnames, contact: input.contact }
   });
 
   const helpPost = await prisma.helpPost.create({
@@ -389,6 +391,7 @@ app.post('/help-posts', async (request, reply) => {
       personId: person.id,
       kind: input.kind,
       name: input.name,
+      surnames: input.surnames,
       contact: input.contact,
       locationSource: resolvedLocation.locationSource,
       state: resolvedLocation.state,
@@ -591,10 +594,16 @@ app.patch('/help-posts/:id', async (request, reply) => {
   }
 
   const publicCoordinates = createPublicCoordinates(resolvedLocation.latitude, resolvedLocation.longitude);
+  await prisma.person.update({
+    where: { id: helpPost.personId },
+    data: { name: input.name, surnames: input.surnames, contact: input.contact }
+  });
+
   const updatedHelpPost = await prisma.helpPost.update({
     where: { id },
     data: {
       name: input.name,
+      surnames: input.surnames,
       contact: input.contact,
       locationSource: resolvedLocation.locationSource,
       state: resolvedLocation.state,

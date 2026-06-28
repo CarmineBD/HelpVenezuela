@@ -97,6 +97,15 @@ export const identityCardSchema = z
   .max(20)
   .regex(/^[VE]-?\d{5,12}$/i, 'Formato de cedula invalido');
 export const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato horario invalido');
+const spanishPersonNameSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(80)
+  .regex(
+    /^[A-Za-zÁÉÍÓÚáéíóúÑñ]+(?: [A-Za-zÁÉÍÓÚáéíóúÑñ]+)*$/,
+    'Usa solo letras, espacios, tildes en vocales y la ñ'
+  );
 
 const venezuelaStateSet = new Set<string>(venezuelaStates);
 const venezuelaCityByStateSets = new Map<string, Set<string>>(
@@ -165,7 +174,8 @@ function validateTimeRange(value: { timeFrom: string | null; timeTo: string | nu
 const helpPostBaseSchema = z
   .object({
     kind: helpPostKindSchema,
-    name: z.string().min(2).max(80),
+    name: spanishPersonNameSchema,
+    surnames: spanishPersonNameSchema,
     contact: z.string().min(5).max(80),
     urgency: urgencySchema.optional(),
     description: z.string().min(10).max(500),
